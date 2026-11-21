@@ -5482,7 +5482,6 @@ impl Niri {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_layer_normal<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
@@ -5500,7 +5499,6 @@ impl Niri {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render_layer_popups<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
@@ -6366,7 +6364,6 @@ impl Niri {
     /// Renders the elements into the frame's buffer and completes the frame.
     ///
     /// Returns `true` if it succeeded and `false` otherwise.
-    #[allow(clippy::too_many_arguments)]
     fn capture_image_copy_frame(
         &self,
         renderer: &mut GlesRenderer,

@@ -345,7 +345,6 @@ impl Thumbnail {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn render<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,

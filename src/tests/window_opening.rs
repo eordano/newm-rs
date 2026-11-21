@@ -508,7 +508,6 @@ fn target_size() {
         });
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_target_size(
     open_fullscreen: Option<&str>,
     want_fullscreen: WantFullscreen,
