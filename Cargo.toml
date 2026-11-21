@@ -18,6 +18,11 @@ edition = "2024"
 repository = "https://github.com/eordano/newm-rs"
 rust-version = "1.87"
 
+[workspace.lints.clippy]
+new_without_default = "allow"
+collapsible_match = "allow"
+needless_bool = "allow"
+
 [workspace.dependencies]
 anyhow = "1.0.104"
 bitflags = "2.13"
@@ -166,9 +171,8 @@ synth = ["dep:newm-synth", "dep:pipewire"]
 # Renders text with pango: the hotkey overlay, dialog and notification text, window titles.
 text = ["dep:pango", "dep:pangocairo"]
 
-[lints.clippy]
-new_without_default = "allow"
-collapsible_match = "allow"
+[lints]
+workspace = true
 
 [profile.release]
 debug = "line-tables-only"
