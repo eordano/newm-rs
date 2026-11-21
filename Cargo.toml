@@ -16,7 +16,7 @@ description = "A Wayland compositor with a strict 2D tile canvas: a fork of niri
 license = "GPL-3.0-or-later"
 edition = "2024"
 repository = "https://github.com/eordano/newm-rs"
-rust-version = "1.87"
+rust-version = "1.88"
 
 [workspace.lints.clippy]
 new_without_default = "allow"
