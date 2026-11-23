@@ -442,8 +442,9 @@ the same browser that picks no size opens at the first one's span.
 
 - Every rearrangement (move, drop, swap, resize, send-to-edge, gather) records the layout before
   it; at most 64 steps. A new rearrangement clears redo.
-- A park (6.9) records one step per window it moves. While those are the last steps of the
-  history, one undo takes all of them back and one redo does them all again.
+- A park (6.9) records one step per window it moves, and a placement over IPC (6.11) one for
+  its move and one per axis it resizes. While those are the last steps of the history, one undo
+  takes all of them back and one redo does them all again.
 - Opening, closing or renaming a window forgets the history.
 - Restoring a snapshot MUST be refused, with nothing changed, unless it holds exactly the
   windows on the canvas at positive spans with no two overlapping; a refused undo forgets the
@@ -825,7 +826,8 @@ xwayland-satellite and Xwayland are skipped (their command lines bring back noth
 - app IDs containing, ignoring case: `polkit`, `pinentry`, `askpass`, `xdg-desktop-portal`,
   `org.freedesktop.impl.portal`, `kwallet`, `ksecretd`, `org.kde.kded`, `swaylock`, `gtklock`,
   `hyprlock`, `newm-rs-lock`;
-- apps matching a `restore-exclude` regex (also never relaunched).
+- apps matching a `restore-exclude` regex (also never relaunched);
+- windows a client marked with `NewmRestoreExclude` (6.11).
 
 ### 6.4 Restoring
 
@@ -999,6 +1001,33 @@ name, made from the app ID:
 newm-rs reads the desktop files at start, and again on an app ID they do not name once they are
 10 s old. Window rules and `restore-exclude` do not use this name: their regular expressions match
 the app ID as the window gives it.
+
+### 6.11 Windows over IPC
+
+A client that shows windows on tiles it chooses reads and sets them by window id
+([IPC](ipc.md#windows-on-tiles)).
+- The window list and the window events give each tiled window's tiles on its canvas (column,
+  row, width, height) as `layout.tiles`, and none for a floating window. The workspace id names
+  the canvas. A change of tiles sends `WindowLayoutsChanged` (newm-river:
+  `WindowOpenedOrChanged`).
+- `NewmPlaceWindow` takes a window id, a tile and an optional span. It MUST go through the
+  canvas's own operations, in this order: one `move_to` to the tile at the span the window has,
+  as a drop by the pointer (3.11), then one `resize` of the right edge and one of the bottom
+  edge for the span (3.7). The move comes first, so no window moves where the placed one leaves:
+  the gap behind it stays open, as behind any move.
+- Taken tiles: the placed window gets the tiles asked, and the windows that hold them make room
+  by the placement engine (3.8), as for a drop. The request never fails because tiles are taken.
+- A span below the window's minimum (3.4) becomes the minimum; a span past the screen at 1:1
+  (3.5) becomes the largest that fits. The reply holds the tiles the window has after the
+  request.
+- The focus stays; the camera moves the least it must to show the focused window. One undo takes
+  the whole placement back and one redo does it again (3.12).
+- The request is refused, with nothing changed, for an unknown id, for a span with a width or
+  height below 1, and for a window that is not on the grid (floating, fullscreen or maximized).
+- `NewmRestoreExclude` takes a window id and a flag. A marked window is never saved (6.3), so no
+  login relaunches it. The mark is in memory, belongs to that window and ends when the window
+  closes. It is a request and not a property a client sets on its toplevels: no protocol carries
+  one, and the window's id is what the client already holds from the window list.
 
 ## 7. Lock
 
@@ -1205,6 +1234,8 @@ users notice.
   motion past 8 px pans; a pan under way goes on; the same with Alt as the mod key.
 - `src/tests/pinch.rs`: pinches through the input path: three fingers and Mod with two zoom in
   whole levels within the bounds, a plain two-finger pinch leaves the camera alone.
+- `src/tests/window_tiles.rs`: tiles in the window list, a window placed by id on free and on
+  taken tiles, the refusals, and a window kept out of the saved session, with a client's JSON.
 - `src/session*`: save format, never-saved list, launch planning, title matching, terminal command
   lines, Chromium flags.
 - `src/dbus/kde_tests.rs`, `newm-kde`: kglobalaccel, KRunner, inhibitions, Qt key codes.

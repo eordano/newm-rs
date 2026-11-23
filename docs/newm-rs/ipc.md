@@ -3,7 +3,8 @@
 newm-rs answers niri's IPC unchanged: the socket in `$NIRI_SOCKET`, `newm-rs msg` on the command
 line (niri's own `niri msg` works too), and the JSON protocol described in
 [niri's IPC page](../wiki/IPC.md). A build with the `canvas` feature
-adds the [live settings](#live-settings) requests, the [block](#blocks) requests and the
+adds the [live settings](#live-settings) requests, the [block](#blocks) requests, the
+[window](#windows-on-tiles) requests and the
 [canvas actions](SPEC.md#52-keyboard-parity-canvas-actions):
 
 ```sh
@@ -213,3 +214,86 @@ One window of a block:
 to just left of the view. The camera then shows the parked window nearest the view at its left
 edge, which takes the focus; the rest of the view is free for a block. One undo takes the park
 back.
+
+## Windows on tiles
+
+A client that shows windows on tiles it chooses (a remote-window client, a layout script) reads
+each window's tiles from the window list, places a window by its id, and keeps a window out of
+the saved session. A build with the `canvas` feature does all three; newm-river does the same.
+[SPEC 6.11](SPEC.md#611-windows-over-ipc) has the rules.
+
+### Tiles in the window list
+
+Each window of `Windows`, `FocusedWindow`, `PickedWindow` and of the events `WindowsChanged` and
+`WindowOpenedOrChanged` has its tiles in its `layout`:
+
+```json
+{
+  "id": 42,
+  "app_id": "foot",
+  "workspace_id": 1,
+  "is_floating": false,
+  "layout": {
+    "tiles": [12, 0, 8, 6],
+    "pos_in_scrolling_layout": [3, 1],
+    "tile_size": [960.0, 720.0]
+  }
+}
+```
+
+(The other fields are niri's and are left out here.)
+
+- `layout.tiles` is the tiles a tiled window holds on its canvas: column, row, width and height.
+  Columns count to the right and rows count down from a tile (0, 0) the canvas fixes, so both can
+  be negative. They are the tiles `NewmPlaceWindow` takes, the `Tiles` anchor of a
+  [block](#blocks) takes and the session file holds.
+- A floating window has `"tiles": null` and `"is_floating": true`. A fullscreen or maximized
+  tiled window keeps the tiles it returns to.
+- `workspace_id` names the window's canvas: each workspace has one canvas, and `Workspaces`
+  gives the workspace's output and index. newm-river has one canvas per output, and its
+  workspace id is the output's.
+- When a window's tiles change (it moves, it resizes, or it makes room for another window), the
+  event `WindowLayoutsChanged` carries its new `layout`, tiles included, in the same burst as the
+  change. newm-river sends `WindowOpenedOrChanged` with the whole window instead.
+- The field is additive: a build without the `canvas` feature sends none, and a client reads a
+  missing `tiles` as `null`.
+
+`newm-rs msg windows` prints the tiles as `Canvas tiles: column 12, row 0, 8 x 6`.
+
+### Requests
+
+| Request | JSON | Reply |
+| --- | --- | --- |
+| `NewmPlaceWindow` | `{"NewmPlaceWindow":{"id":42,"tile":[12,0],"span":[8,6]}}` | `{"Ok":{"NewmWindowTiles":{"id":42,"tiles":[12,0,8,6]}}}` or `{"Err":"..."}` |
+| `NewmRestoreExclude` | `{"NewmRestoreExclude":{"id":42,"exclude":true}}` | `{"Ok":"Handled"}` or `{"Err":"no such window"}` |
+
+`NewmPlaceWindow` moves a tiled window, on the canvas it is on, so that its top-left corner is
+on `tile` (column, row):
+
+- `id` is the window's id as `Windows` lists it. `span` (width, height in tiles) is optional;
+  without it the window keeps its span.
+- The window always gets the tiles asked. When other windows hold some of them, they make room
+  by the canvas's placement rules, exactly as when the pointer drops the window there. No
+  request fails because tiles are taken.
+- The window moves first, at the span it has, and then takes the new span on the tiles asked,
+  as a resize of its right and bottom edges by hand: a grow makes room, and a shrink lets the
+  windows against the freed tiles close the gap. Where the window leaves, nothing moves.
+- A `span` below the window's minimum becomes the minimum, and one larger than the screen holds
+  at 1:1 becomes the largest that fits. The reply's `tiles` are the tiles the window holds after
+  the request: compare them with the ones asked.
+- The focus stays where it is, and the camera moves only as far as it must to keep showing the
+  focused window. One undo takes the whole placement back.
+- Errors: `no such window`, `bad span` (a width or height below 1) and `the window is not on the
+  grid` (a floating, fullscreen or maximized window).
+
+`NewmRestoreExclude` with `"exclude": true` keeps the window out of the saved session, so the
+next login does not relaunch it; `false` puts it back. The mark belongs to the window and ends
+when it closes; it leaves the app's other windows alone, unlike the `restore-exclude` config
+rule, which matches an app ID. The mark is a request by id and not a property of the toplevel:
+no Wayland protocol carries such a property, and a client that shows another program's windows
+does not make their toplevels, but it does see their ids in the window list. A client sends the
+request when `WindowOpenedOrChanged` first shows its window; the session file follows a change
+by 2 to 4 seconds, so the request arrives first.
+
+On the command line, `newm-river msg newm-place-window ID COLUMN ROW [WIDTH HEIGHT]` and
+`newm-river msg newm-restore-exclude ID [true|false]` send them.
