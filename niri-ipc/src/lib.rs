@@ -1652,6 +1652,13 @@ pub struct WindowLayout {
     /// column is at index 1. This is consistent with [`Action::FocusColumn`] and
     /// [`Action::FocusWindowInColumn`].
     pub pos_in_scrolling_layout: Option<(usize, usize)>,
+    /// Tiles a tiled window holds on its workspace's canvas: column, row, width and height.
+    ///
+    /// Columns grow to the right and rows grow down, from a tile (0, 0) that every window of the
+    /// canvas shares; they can be negative. A floating window has none.
+    #[cfg(feature = "canvas")]
+    #[serde(default)]
+    pub tiles: Option<(i32, i32, i32, i32)>,
     /// Size of the tile this window is in, including decorations like borders.
     pub tile_size: (f64, f64),
     /// Size of the window's visual geometry itself.

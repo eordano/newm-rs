@@ -912,6 +912,8 @@ impl<W: LayoutElement> Tile<W> {
     pub fn ipc_layout_template(&self) -> WindowLayout {
         WindowLayout {
             pos_in_scrolling_layout: None,
+            #[cfg(feature = "canvas")]
+            tiles: None,
             tile_size: self.tile_size().into(),
             window_size: self.window().size().into(),
             tile_pos_in_workspace_view: None,

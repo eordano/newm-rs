@@ -25,3 +25,5 @@ mod synth;
 mod transactions;
 mod virtual_pointer;
 mod window_opening;
+#[cfg(feature = "canvas")]
+mod window_tiles;

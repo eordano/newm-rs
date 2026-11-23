@@ -750,6 +750,8 @@ fn print_window(window: &Window) {
 
     let WindowLayout {
         pos_in_scrolling_layout,
+        #[cfg(feature = "canvas")]
+        tiles,
         tile_size,
         window_size,
         tile_pos_in_workspace_view,
@@ -765,6 +767,11 @@ fn print_window(window: &Window) {
 
     if let Some(pos) = pos_in_scrolling_layout {
         println!("    Scrolling position: column {}, tile {}", pos.0, pos.1);
+    }
+
+    #[cfg(feature = "canvas")]
+    if let Some((column, row, width, height)) = tiles {
+        println!("    Canvas tiles: column {column}, row {row}, {width} x {height}");
     }
 
     if let Some(pos) = tile_pos_in_workspace_view {

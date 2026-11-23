@@ -2299,6 +2299,7 @@ impl<W: LayoutElement> CanvasSpace<W> {
                 .to_logical(self.scale);
             let layout = WindowLayout {
                 pos_in_scrolling_layout: Some((col, row)),
+                tiles: Some((r.i, r.j, r.w, r.h)),
                 tile_pos_in_workspace_view: Some(pos.into()),
                 ..e.tile.ipc_layout_template()
             };
