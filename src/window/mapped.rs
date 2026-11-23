@@ -143,6 +143,11 @@ pub struct Mapped {
     #[cfg(feature = "canvas")]
     remote_host: RefCell<Option<String>>,
 
+    /// Whether a client asked to keep this window out of the saved session (the
+    /// `NewmRestoreExclude` request).
+    #[cfg(feature = "canvas")]
+    restore_excluded: Cell<bool>,
+
     /// Whether this window is in windowed (fake) fullscreen.
     ///
     /// In this mode, the underlying window is told that it's fullscreen, while keeping it as
@@ -319,6 +324,8 @@ impl Mapped {
             last_interactive_resize_start: Cell::new(None),
             #[cfg(feature = "canvas")]
             remote_host: RefCell::new(None),
+            #[cfg(feature = "canvas")]
+            restore_excluded: Cell::new(false),
             is_windowed_fullscreen: false,
             is_pending_windowed_fullscreen: false,
             uncommitted_windowed_fullscreen: Vec::new(),
@@ -516,6 +523,18 @@ impl Mapped {
     #[cfg(feature = "canvas")]
     pub fn set_remote_host(&self, host: Option<String>) {
         self.remote_host.replace(host);
+    }
+
+    /// Keeps this window out of the saved session, or puts it back.
+    #[cfg(feature = "canvas")]
+    pub fn set_restore_excluded(&self, excluded: bool) {
+        self.restore_excluded.set(excluded);
+    }
+
+    /// Whether a client keeps this window out of the saved session.
+    #[cfg(feature = "canvas")]
+    pub fn is_restore_excluded(&self) -> bool {
+        self.restore_excluded.get()
     }
 
     pub fn last_interactive_resize_start(&self) -> &Cell<Option<(Duration, ResizeEdge)>> {

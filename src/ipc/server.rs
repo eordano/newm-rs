@@ -511,7 +511,7 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
             result.map_err(|_| String::from("error handling the block request"))??
         }
         #[cfg(feature = "canvas")]
-        request @ Request::NewmPlaceWindow { .. } => {
+        request @ (Request::NewmPlaceWindow { .. } | Request::NewmRestoreExclude { .. }) => {
             let (tx, rx) = async_channel::bounded(1);
             ctx.event_loop.insert_idle(move |state| {
                 let _ = tx.send_blocking(state.newm_window_request(request));
@@ -1163,7 +1163,7 @@ impl State {
     }
 
     /// Answers a request about one window, named by its id: places it on given tiles of its
-    /// canvas.
+    /// canvas, or keeps it out of the saved session.
     #[cfg(feature = "canvas")]
     pub fn newm_window_request(&mut self, request: Request) -> Reply {
         let find = |state: &Self, id: u64| {
@@ -1189,6 +1189,14 @@ impl State {
                     id,
                     tiles: (r.i, r.j, r.w, r.h),
                 })
+            }
+            Request::NewmRestoreExclude { id, exclude } => {
+                let mut windows = self.niri.layout.windows();
+                let (_, mapped) = windows
+                    .find(|(_, mapped)| mapped.id().get() == id)
+                    .ok_or_else(|| String::from("no such window"))?;
+                mapped.set_restore_excluded(exclude);
+                Ok(Response::Handled)
             }
             _ => Err(String::from("not a window request")),
         }

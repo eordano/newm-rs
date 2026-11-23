@@ -375,9 +375,10 @@ pub fn excluded(app_id: &str, patterns: &[RegexEq]) -> bool {
 }
 
 /// The window's app ID, title and process, when it is saved: a toplevel with an app ID, not a
-/// dialog (those come back with their parent's app, or not at all), and not excluded.
+/// dialog (those come back with their parent's app, or not at all), and not excluded, by its
+/// app or by a client's `NewmRestoreExclude` request.
 fn found(mapped: &Mapped, exclude: &[RegexEq]) -> Option<Found> {
-    if mapped.toplevel().parent().is_some() {
+    if mapped.toplevel().parent().is_some() || mapped.is_restore_excluded() {
         return None;
     }
     let app_id = mapped.app_id().filter(|id| !id.is_empty())?;
@@ -393,7 +394,7 @@ fn found(mapped: &Mapped, exclude: &[RegexEq]) -> Option<Found> {
 }
 
 /// The session the layout shows now.
-fn snapshot(
+pub(crate) fn snapshot(
     layout: &Layout<Mapped>,
     exclude: &[RegexEq],
     relaunch: impl FnMut(&Found) -> Option<Relaunch>,

@@ -180,6 +180,15 @@ pub enum Request {
         #[serde(default)]
         span: Option<(i32, i32)>,
     },
+    /// Keep a window out of the saved session, or put it back: an excluded window is not
+    /// saved, so the next login does not relaunch it. The mark lasts until the window closes.
+    #[cfg(feature = "canvas")]
+    NewmRestoreExclude {
+        /// The window's id, as [`Window::id`] gives it.
+        id: u64,
+        /// Whether the window stays out of the saved session.
+        exclude: bool,
+    },
 }
 
 /// Reply from niri to client.

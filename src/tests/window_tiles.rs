@@ -1,5 +1,6 @@
 //! A client that shows windows on given tiles: the window list carries each tiled window's
-//! tiles and a request places a window by its id, with the JSON a client sends.
+//! tiles, a request places a window by its id, and another keeps a window out of the saved
+//! session, with the JSON a client sends.
 
 use std::collections::HashMap;
 
@@ -62,6 +63,24 @@ fn toggle_floating(f: &mut Fixture, client: ClientId, id: u64) {
     let window = window.unwrap().1.window.clone();
     f.niri().layout.toggle_window_floating(Some(&window));
     f.double_roundtrip(client);
+}
+
+/// The app IDs the session saves now.
+fn saved_apps(f: &mut Fixture) -> Vec<String> {
+    let session = crate::session::snapshot(&f.niri().layout, &[], |_| None);
+    let mut apps: Vec<String> = session
+        .canvases
+        .iter()
+        .flat_map(|c| c.windows.iter().map(|w| w.app_id.clone()))
+        .chain(
+            session
+                .canvases
+                .iter()
+                .flat_map(|c| c.floating.iter().map(|w| w.app_id.clone())),
+        )
+        .collect();
+    apps.sort_unstable();
+    apps
 }
 
 #[test]
@@ -195,4 +214,42 @@ fn place_window_refuses_what_it_cannot_place() {
         before[&b],
         "a refused request moves nothing"
     );
+}
+
+#[test]
+fn restore_exclude_keeps_a_window_out_of_the_saved_session() {
+    let mut f = Fixture::new();
+    f.add_output(1, (1920, 1080));
+    let (client, a, b) = two_windows(&mut f);
+    assert_eq!(saved_apps(&mut f), ["a", "b"]);
+
+    let reply = ask(
+        &mut f,
+        json!({"NewmRestoreExclude": {"id": a, "exclude": true}}),
+    );
+    assert_eq!(
+        serde_json::to_value(&reply).unwrap(),
+        json!({"Ok": "Handled"})
+    );
+    assert_eq!(
+        saved_apps(&mut f),
+        ["b"],
+        "the session leaves the window out"
+    );
+
+    toggle_floating(&mut f, client, a);
+    assert_eq!(saved_apps(&mut f), ["b"], "floating too");
+
+    let reply = ask(
+        &mut f,
+        json!({"NewmRestoreExclude": {"id": a, "exclude": false}}),
+    );
+    assert!(reply.is_ok());
+    assert_eq!(saved_apps(&mut f), ["a", "b"], "and takes it back");
+
+    let reply = ask(
+        &mut f,
+        json!({"NewmRestoreExclude": {"id": a + b + 1, "exclude": true}}),
+    );
+    assert_eq!(reply.err(), Some(String::from("no such window")));
 }
