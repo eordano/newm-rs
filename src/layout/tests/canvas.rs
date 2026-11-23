@@ -4215,3 +4215,108 @@ fn canvas_block_at_nearest_lands_in_the_view_a_park_cleared() {
         "the view the park cleared holds the block"
     );
 }
+
+/// Every window's tiles, sorted.
+fn sorted_rects(canvas: &Canvas) -> Vec<(i32, i32, i32, i32)> {
+    let mut rects: Vec<_> = canvas
+        .windows()
+        .iter()
+        .map(|w| (w.rect.i, w.rect.j, w.rect.w, w.rect.h))
+        .collect();
+    rects.sort_unstable();
+    rects
+}
+
+#[test]
+fn canvas_place_window_lands_on_taken_tiles_as_a_drop_there_does() {
+    let mut layout = placed(&row(3));
+    let before = window_rects(&layout);
+    let focus = focus_id(&layout);
+    let mut dropped = active_canvas(&layout).clone();
+    let mover = dropped
+        .windows()
+        .iter()
+        .find(|w| w.rect == before[&2])
+        .map(|w| w.id)
+        .unwrap();
+    dropped.move_to(mover, 0, 0);
+
+    let placed = layout.canvas_place_window(&2, (0, 0), None);
+    layout.verify_invariants();
+    assert_eq!(
+        placed,
+        Some(Rect::new(0, 0, 1, 1)),
+        "the window takes the tiles asked"
+    );
+    let after = window_rects(&layout);
+    assert_eq!(after[&2], Rect::new(0, 0, 1, 1));
+    assert_ne!(
+        after[&0], before[&0],
+        "the window that held them makes room"
+    );
+    assert_eq!(
+        sorted_rects(active_canvas(&layout)),
+        sorted_rects(&dropped),
+        "as one Canvas::move_to arranges them"
+    );
+    assert_eq!(focus_id(&layout), focus, "the focus stays");
+
+    assert!(layout.canvas_undo());
+    assert_eq!(window_rects(&layout), before);
+    assert_eq!(
+        layout.canvas_place_window(&2, (2, 0), None),
+        Some(before[&2])
+    );
+    assert_eq!(
+        window_rects(&layout),
+        before,
+        "its own tiles change nothing"
+    );
+    assert_eq!(layout.canvas_place_window(&99, (0, 0), None), None);
+}
+
+#[test]
+fn canvas_place_window_sets_the_span_and_undoes_in_one_step() {
+    let mut layout = placed(&row(3));
+    let before = window_rects(&layout);
+    let placed = layout.canvas_place_window(&1, (5, 3), Some((2, 3)));
+    layout.verify_invariants();
+    assert_eq!(placed, Some(Rect::new(5, 3, 2, 3)));
+    let after = window_rects(&layout);
+    assert_eq!(after[&1], Rect::new(5, 3, 2, 3));
+
+    assert!(layout.canvas_undo());
+    layout.verify_invariants();
+    assert_eq!(
+        window_rects(&layout),
+        before,
+        "one undo takes the move and the span back"
+    );
+    assert!(layout.canvas_redo());
+    assert_eq!(window_rects(&layout), after, "one redo places again");
+
+    let shrunk = layout.canvas_place_window(&1, (5, 3), Some((1, 1)));
+    layout.verify_invariants();
+    assert_eq!(
+        shrunk,
+        Some(Rect::new(5, 3, 1, 1)),
+        "a span alone resizes in place"
+    );
+}
+
+#[test]
+fn canvas_place_window_keeps_the_span_on_the_screen() {
+    let mut layout = placed(&row(2));
+    let placed = layout
+        .canvas_place_window(&0, (0, 4), Some((500, 500)))
+        .unwrap();
+    layout.verify_invariants();
+    let c = active_canvas(&layout);
+    assert_eq!((placed.i, placed.j), (0, 4));
+    assert!(
+        c.fits_at_1to1(placed.w, placed.h),
+        "no wider or taller than the screen at 1:1"
+    );
+    assert!(!c.fits_at_1to1(placed.w + 1, placed.h) && !c.fits_at_1to1(placed.w, placed.h + 1));
+    assert!(placed.w > 1 && placed.h > 1);
+}

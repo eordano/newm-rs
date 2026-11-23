@@ -510,6 +510,15 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
             let result = rx.recv().await;
             result.map_err(|_| String::from("error handling the block request"))??
         }
+        #[cfg(feature = "canvas")]
+        request @ Request::NewmPlaceWindow { .. } => {
+            let (tx, rx) = async_channel::bounded(1);
+            ctx.event_loop.insert_idle(move |state| {
+                let _ = tx.send_blocking(state.newm_window_request(request));
+            });
+            let result = rx.recv().await;
+            result.map_err(|_| String::from("error handling the window request"))??
+        }
     };
 
     Ok(response)
@@ -1151,6 +1160,38 @@ impl State {
         };
         self.niri.queue_redraw_all();
         Ok(response)
+    }
+
+    /// Answers a request about one window, named by its id: places it on given tiles of its
+    /// canvas.
+    #[cfg(feature = "canvas")]
+    pub fn newm_window_request(&mut self, request: Request) -> Reply {
+        let find = |state: &Self, id: u64| {
+            let mut windows = state.niri.layout.windows();
+            windows
+                .find(|(_, mapped)| mapped.id().get() == id)
+                .map(|(_, mapped)| mapped.window.clone())
+                .ok_or_else(|| String::from("no such window"))
+        };
+        match request {
+            Request::NewmPlaceWindow { id, tile, span } => {
+                if span.is_some_and(|(w, h)| w < 1 || h < 1) {
+                    return Err(String::from("bad span"));
+                }
+                let window = find(self, id)?;
+                let r = self
+                    .niri
+                    .layout
+                    .canvas_place_window(&window, tile, span)
+                    .ok_or_else(|| String::from("the window is not on the grid"))?;
+                self.niri.queue_redraw_all();
+                Ok(Response::NewmWindowTiles {
+                    id,
+                    tiles: (r.i, r.j, r.w, r.h),
+                })
+            }
+            _ => Err(String::from("not a window request")),
+        }
     }
 
     /// Tells the live options which displays are connected and the scale each is drawn at, so

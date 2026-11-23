@@ -167,6 +167,19 @@ pub enum Request {
     /// of the view. The camera stays; one undo takes the move back.
     #[cfg(feature = "canvas")]
     NewmParkWindows,
+    /// Move a tiled window to given tiles of its canvas, as a drop there by the pointer does:
+    /// windows on those tiles make room. The reply is [`Response::NewmWindowTiles`].
+    #[cfg(feature = "canvas")]
+    NewmPlaceWindow {
+        /// The window's id, as [`Window::id`] gives it.
+        id: u64,
+        /// The tile the window's top-left corner goes to: column and row.
+        tile: (i32, i32),
+        /// The span to give the window first, in tiles: width and height. Left out, the window
+        /// keeps its span.
+        #[serde(default)]
+        span: Option<(i32, i32)>,
+    },
 }
 
 /// Reply from niri to client.
@@ -240,6 +253,14 @@ pub enum Response {
         windows: Vec<Option<u64>>,
         /// Whether every slot has a window or was released.
         done: bool,
+    },
+    /// The tiles a window holds after [`Request::NewmPlaceWindow`].
+    #[cfg(feature = "canvas")]
+    NewmWindowTiles {
+        /// The window's id.
+        id: u64,
+        /// Its tiles on its canvas: column, row, width and height.
+        tiles: (i32, i32, i32, i32),
     },
 }
 
