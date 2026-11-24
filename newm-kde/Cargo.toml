@@ -1,0 +1,10 @@
+[package]
+name = "newm-kde"
+version = "0.1.0"
+description = "The KDE session services newm serves without KWin (kglobalaccel, KRunner window search, inhibitions): their logic, free of any D-Bus library"
+license = "GPL-3.0-or-later"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"

@@ -15,6 +15,13 @@ pub mod freedesktop_screensaver;
 pub mod gnome_shell;
 pub mod gnome_shell_introspect;
 pub mod gnome_shell_screenshot;
+pub mod kde_kglobalaccel;
+pub mod kde_krunner;
+pub mod kde_kwin;
+pub mod kde_kwin_screenshot2;
+pub mod kde_policy_agent;
+#[cfg(test)]
+mod kde_tests;
 pub mod mutter_display_config;
 pub mod mutter_service_channel;
 
@@ -39,6 +46,10 @@ pub struct DBusServers {
     pub conn_screen_saver: Option<Connection>,
     pub conn_screen_shot: Option<Connection>,
     pub conn_gnome_shell: Option<Connection>,
+    pub conn_kwin_screen_shot: Option<Connection>,
+    pub conn_kwin: Option<Connection>,
+    pub conn_policy_agent: Option<Connection>,
+    pub conn_kglobalaccel: Option<Connection>,
     pub conn_introspect: Option<Connection>,
     #[cfg(feature = "xdp-gnome-screencast")]
     pub conn_screen_cast: Option<Connection>,
@@ -93,8 +104,55 @@ impl DBusServers {
                 .unwrap();
             dbus.conn_display_config = try_start(display_config, is_session_instance);
 
-            let screen_saver = ScreenSaver::new(niri.is_fdo_idle_inhibited.clone());
+            let (to_niri, from_screen_saver) = calloop::channel::channel();
+            niri.event_loop
+                .insert_source(from_screen_saver, move |event, _, state| match event {
+                    calloop::channel::Event::Msg(
+                        freedesktop_screensaver::ToNiri::SimulateActivity,
+                    ) => state.niri.notify_activity(),
+                    calloop::channel::Event::Closed => (),
+                })
+                .unwrap();
+            let screen_saver = ScreenSaver::new(
+                niri.is_fdo_idle_inhibited.clone(),
+                niri.screen_saver_activity.clone(),
+                to_niri,
+            );
+            let policy_agent = kde_policy_agent::PolicyAgent::new(screen_saver.clone());
             dbus.conn_screen_saver = try_start(screen_saver, is_session_instance);
+            dbus.conn_policy_agent = try_start(policy_agent, is_session_instance);
+
+            let (to_niri, from_kglobalaccel) = calloop::channel::channel();
+            niri.event_loop
+                .insert_source(from_kglobalaccel, move |event, _, state| match event {
+                    calloop::channel::Event::Msg(kde_kglobalaccel::ToNiri::Bindings(b)) => {
+                        state.niri.kde_shortcuts.set_bindings(b);
+                    }
+                    calloop::channel::Event::Closed => (),
+                })
+                .unwrap();
+            let mut registry = match kde_kglobalaccel::registry_path() {
+                Some(path) => {
+                    let (registry, err) = newm_kde::kglobalaccel::Registry::load(path);
+                    if let Some(err) = err {
+                        warn!("error loading the global shortcuts: {err}");
+                    }
+                    registry
+                }
+                None => newm_kde::kglobalaccel::Registry::default(),
+            };
+            // Launch keys from desktop files (Spectacle's Print and friends), as kglobalacceld.
+            registry.add_services(newm_kde::service::scan(&newm_kde::service::dirs()));
+            let registry = std::sync::Arc::new(std::sync::Mutex::new(registry));
+            niri.kde_shortcuts.registry = Some(registry.clone());
+            niri.kde_shortcuts
+                .set_reserved(kde_kglobalaccel::reserved_keys(
+                    &config,
+                    backend.mod_key(&config),
+                ));
+            let kglobalaccel = kde_kglobalaccel::KGlobalAccel::new(registry, to_niri);
+            dbus.conn_kglobalaccel = try_start(kglobalaccel, is_session_instance);
+            niri.kde_shortcuts.conn = dbus.conn_kglobalaccel.clone();
 
             let (to_niri, from_screenshot) = calloop::channel::channel();
             let (to_screenshot, from_niri) = async_channel::unbounded();
@@ -121,6 +179,25 @@ impl DBusServers {
                 dbus.conn_gnome_shell = Some(x);
                 niri.gnome_shell = Some(shell);
             }
+
+            let (to_niri, from_kwin_screenshot) = calloop::channel::channel();
+            niri.event_loop
+                .insert_source(from_kwin_screenshot, move |event, _, state| match event {
+                    calloop::channel::Event::Msg(msg) => state.on_kwin_screenshot_msg(msg),
+                    calloop::channel::Event::Closed => (),
+                })
+                .unwrap();
+            let kwin_screenshot = kde_kwin_screenshot2::ScreenShot2::new(to_niri);
+            dbus.conn_kwin_screen_shot = try_start(kwin_screenshot, is_session_instance);
+
+            let (to_niri, from_kwin) = calloop::channel::channel();
+            niri.event_loop
+                .insert_source(from_kwin, move |event, _, state| match event {
+                    calloop::channel::Event::Msg(msg) => state.on_kwin_msg(msg),
+                    calloop::channel::Event::Closed => (),
+                })
+                .unwrap();
+            dbus.conn_kwin = try_start(kde_kwin::KWin::new(to_niri), is_session_instance);
 
             let (to_niri, from_introspect) = calloop::channel::channel();
             let (to_introspect, from_niri) = async_channel::unbounded();
