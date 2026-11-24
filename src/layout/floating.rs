@@ -5,6 +5,7 @@ use std::rc::Rc;
 use niri_config::utils::MergeWith as _;
 use niri_config::{PresetSize, RelativeTo};
 use niri_ipc::{PositionChange, SizeChange, WindowLayout};
+use smithay::backend::renderer::element::utils::RescaleRenderElement;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::utils::{Logical, Point, Rectangle, Scale, Serial, Size};
 
@@ -51,8 +52,8 @@ pub struct FloatingSpace<W: LayoutElement> {
     /// Ongoing interactive resize.
     interactive_resize: Option<InteractiveResize<W>>,
 
-    /// Windows in the closing animation.
-    closing_windows: Vec<ClosingWindow>,
+    /// Windows in the closing animation, each with how the view drew it when it closed.
+    closing_windows: Vec<(ClosingWindow, Option<Follow>)>,
 
     /// View size for this space.
     view_size: Size<f64, Logical>,
@@ -74,6 +75,55 @@ niri_render_elements! {
     FloatingSpaceRenderElement<R> => {
         Tile = TileRenderElement<R>,
         ClosingWindow = ClosingWindowRenderElement,
+        FollowingTile = RescaleRenderElement<TileRenderElement<R>>,
+        FollowingClosingWindow = RescaleRenderElement<ClosingWindowRenderElement>,
+    }
+}
+
+/// How the view draws a floating window that follows the canvas: a point `p` of the floating
+/// space shows at `to + (p - from) * scale`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Follow {
+    pub from: Point<f64, Logical>,
+    pub to: Point<f64, Logical>,
+    pub scale: f64,
+}
+
+impl Follow {
+    pub fn is_scaled(self) -> bool {
+        self.scale != 1.
+    }
+
+    pub fn to_view(self, p: Point<f64, Logical>) -> Point<f64, Logical> {
+        self.to + (p - self.from).upscale(self.scale)
+    }
+
+    pub fn from_view(self, p: Point<f64, Logical>) -> Point<f64, Logical> {
+        self.from + (p - self.to).downscale(self.scale)
+    }
+
+    pub fn rect_to_view(self, r: Rectangle<f64, Logical>) -> Rectangle<f64, Logical> {
+        Rectangle::new(self.to_view(r.loc), r.size.upscale(self.scale))
+    }
+
+    pub fn rect_from_view(self, r: Rectangle<f64, Logical>) -> Rectangle<f64, Logical> {
+        Rectangle::new(self.from_view(r.loc), r.size.downscale(self.scale))
+    }
+
+    /// Where a point of the floating space is drawn before the scale about `to` applies.
+    fn shifted(self, p: Point<f64, Logical>) -> Point<f64, Logical> {
+        p + self.to - self.from
+    }
+
+    /// The backdrop position for elements drawn scaled about `to`, from the view's.
+    fn xray(self, xray: XrayPos) -> XrayPos {
+        if !self.is_scaled() {
+            return xray;
+        }
+        XrayPos {
+            pos_in_backdrop: (xray.pos_in_backdrop + self.to).downscale(self.scale) - self.to,
+            zoom: xray.zoom * self.scale,
+        }
     }
 }
 
@@ -252,7 +302,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
             tile.advance_animations();
         }
 
-        self.closing_windows.retain_mut(|closing| {
+        self.closing_windows.retain_mut(|(closing, _)| {
             closing.advance_animations();
             closing.are_animations_ongoing()
         });
@@ -271,6 +321,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
         is_active: bool,
         view_rect: Rectangle<f64, Logical>,
         layer: RenderLayer,
+        follow: &dyn Fn(&W::Id) -> Option<Follow>,
     ) {
         let active = self.active_window_id.clone();
         for (tile, offset) in self.tiles_with_offsets_mut() {
@@ -282,7 +333,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
             let id = tile.window().id();
             let is_active = is_active && Some(id) == active.as_ref();
 
-            let mut tile_view_rect = view_rect;
+            let mut tile_view_rect = follow(id).map_or(view_rect, |f| f.rect_from_view(view_rect));
             tile_view_rect.loc -= offset + tile.render_offset();
             tile.update_render_elements(is_active, tile_view_rect);
         }
@@ -551,11 +602,14 @@ impl<W: LayoutElement> FloatingSpace<W> {
         }
     }
 
+    /// Starts `id`'s closing animation where the view draws it, through `follow` when it
+    /// follows the canvas.
     pub fn start_close_animation_for_window(
         &mut self,
         renderer: &mut GlesRenderer,
         id: &W::Id,
         blocker: TransactionBlocker,
+        follow: Option<Follow>,
     ) {
         let (tile, tile_pos) = self
             .tiles_with_render_positions_mut(false)
@@ -567,8 +621,10 @@ impl<W: LayoutElement> FloatingSpace<W> {
         };
 
         let tile_size = tile.tile_size();
+        let tile_pos = follow.map_or(tile_pos, |f| f.shifted(tile_pos));
+        let follow = follow.filter(|f| f.is_scaled());
 
-        self.start_close_animation_for_tile(renderer, snapshot, tile_size, tile_pos, blocker);
+        self.push_closing(renderer, snapshot, tile_size, tile_pos, blocker, follow);
     }
 
     pub fn activate_window_without_raising(&mut self, id: &W::Id) -> bool {
@@ -609,6 +665,19 @@ impl<W: LayoutElement> FloatingSpace<W> {
         tile_pos: Point<f64, Logical>,
         blocker: TransactionBlocker,
     ) {
+        self.push_closing(renderer, snapshot, tile_size, tile_pos, blocker, None);
+    }
+
+    /// Starts a closing animation at `tile_pos`, drawn scaled through `follow` when given.
+    fn push_closing(
+        &mut self,
+        renderer: &mut GlesRenderer,
+        snapshot: TileRenderSnapshot,
+        tile_size: Size<f64, Logical>,
+        tile_pos: Point<f64, Logical>,
+        blocker: TransactionBlocker,
+        follow: Option<Follow>,
+    ) {
         let anim = Animation::new(
             self.clock.clone(),
             0.,
@@ -629,7 +698,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
         );
         match res {
             Ok(closing) => {
-                self.closing_windows.push(closing);
+                self.closing_windows.push((closing, follow));
             }
             Err(err) => {
                 warn!("error creating a closing window animation: {err:?}");
@@ -1065,6 +1134,9 @@ impl<W: LayoutElement> FloatingSpace<W> {
         true
     }
 
+    /// Pushes the floating windows' elements; `follow` says how the view draws each window
+    /// that follows the canvas.
+    #[allow(clippy::too_many_arguments)]
     pub fn render<R: NiriRenderer>(
         &self,
         mut ctx: RenderCtx<R>,
@@ -1072,6 +1144,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
         view_rect: Rectangle<f64, Logical>,
         focus_ring: bool,
         layer: RenderLayer,
+        follow: &dyn Fn(&W::Id) -> Option<Follow>,
         push: &mut dyn FnMut(FloatingSpaceRenderElement<R>),
     ) {
         let scale = Scale::from(self.scale);
@@ -1080,9 +1153,23 @@ impl<W: LayoutElement> FloatingSpace<W> {
         //
         // FIXME: I guess this should rather preserve the stacking order when the window is closed.
         if layer.is_normal() {
-            for closing in self.closing_windows.iter().rev() {
-                if let Some(elem) = closing.render(ctx.as_gles(), view_rect, scale) {
-                    push(elem.into());
+            for (closing, drawn) in self.closing_windows.iter().rev() {
+                match drawn {
+                    Some(f) => {
+                        let origin = f.to.to_physical_precise_round(scale);
+                        let shown = Rectangle::new(
+                            f.to + (view_rect.loc - f.to).downscale(f.scale),
+                            view_rect.size.downscale(f.scale),
+                        );
+                        if let Some(elem) = closing.render(ctx.as_gles(), shown, scale) {
+                            push(RescaleRenderElement::from_element(elem, origin, f.scale).into());
+                        }
+                    }
+                    None => {
+                        if let Some(elem) = closing.render(ctx.as_gles(), view_rect, scale) {
+                            push(elem.into());
+                        }
+                    }
                 }
             }
         }
@@ -1097,10 +1184,29 @@ impl<W: LayoutElement> FloatingSpace<W> {
             // For the active tile, draw the focus ring.
             let focus_ring = focus_ring && Some(tile.window().id()) == active.as_ref();
 
-            let xray_pos = xray_pos.offset(tile_pos);
-            tile.render(ctx.r(), tile_pos, xray_pos, focus_ring, &mut |elem| {
-                push(elem.into())
-            });
+            let Some(f) = follow(tile.window().id()) else {
+                let xray_pos = xray_pos.offset(tile_pos);
+                tile.render(ctx.r(), tile_pos, xray_pos, focus_ring, &mut |elem| {
+                    push(elem.into())
+                });
+                continue;
+            };
+
+            let tile_pos = f
+                .shifted(tile_pos)
+                .to_physical_precise_round(scale)
+                .to_logical(scale);
+            let xray_pos = f.xray(xray_pos).offset(tile_pos);
+            if f.is_scaled() {
+                let origin = f.to.to_physical_precise_round(scale);
+                tile.render(ctx.r(), tile_pos, xray_pos, focus_ring, &mut |elem| {
+                    push(RescaleRenderElement::from_element(elem, origin, f.scale).into())
+                });
+            } else {
+                tile.render(ctx.r(), tile_pos, xray_pos, focus_ring, &mut |elem| {
+                    push(elem.into())
+                });
+            }
         }
     }
 

@@ -3,10 +3,11 @@ use std::cmp::{max, min};
 use niri_config::utils::MergeWith as _;
 use niri_config::window_rule::{Match, OnXdgActivate, VrrRule, WindowRule};
 use niri_config::{
-    BackgroundEffect, BlockOutFrom, BorderRule, CornerRadius, FloatingPosition, PresetSize,
-    ResolvedPopupsRules, ShadowRule, TabIndicatorRule,
+    BackgroundEffect, BlockOutFrom, BorderRule, CornerRadius, FloatOrInt, FloatingPosition,
+    PresetSize, RelativeTo, ResolvedPopupsRules, ShadowRule, TabIndicatorRule,
 };
 use niri_ipc::ColumnDisplay;
+use smithay::output::Output;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::utils::{Logical, Size};
 use smithay::wayland::compositor::with_states;
@@ -14,7 +15,8 @@ use smithay::wayland::shell::xdg::{
     SurfaceCachedState, ToplevelSurface, XdgToplevelSurfaceRoleAttributes,
 };
 
-use crate::utils::with_toplevel_role;
+use crate::layout::ActivateWindow;
+use crate::utils::{output_size, with_toplevel_role};
 
 pub mod mapped;
 pub use mapped::Mapped;
@@ -374,25 +376,119 @@ impl ResolvedWindowRules {
         (min_size, max_size)
     }
 
-    pub fn compute_open_floating(&self, toplevel: &ToplevelSurface) -> bool {
-        if let Some(res) = self.open_floating {
-            return res;
-        }
+    /// Whether the window opens floating, on an output of logical size `output`: as its
+    /// `open-floating` rule says, else as its own hints say (see [`OpenHint`]).
+    pub fn compute_open_floating(
+        &self,
+        toplevel: &ToplevelSurface,
+        output: Option<Size<i32, Logical>>,
+    ) -> bool {
+        self.open_floating
+            .unwrap_or_else(|| self.open_hint(toplevel, output) != OpenHint::Tiled)
+    }
 
-        // Windows with a parent (usually dialogs) open as floating by default.
-        if toplevel.parent().is_some() {
-            return true;
-        }
+    /// Whether the window opens as an overlay: no `open-floating` rule decides, and its own hints
+    /// make it one on an output of logical size `output` (see [`OpenHint::Overlay`]).
+    pub fn opens_as_overlay(
+        &self,
+        toplevel: &ToplevelSurface,
+        output: Option<Size<i32, Logical>>,
+    ) -> bool {
+        self.open_floating.is_none() && self.open_hint(toplevel, output) == OpenHint::Overlay
+    }
 
+    fn open_hint(
+        &self,
+        toplevel: &ToplevelSurface,
+        output: Option<Size<i32, Logical>>,
+    ) -> OpenHint {
+        let (min_size, max_size) = self.open_min_max(toplevel);
+        OpenHint::compute(toplevel.parent().is_some(), min_size, max_size, output)
+    }
+
+    /// The minimum and maximum size a new window opens with: its own, then the rules'.
+    pub fn open_min_max(
+        &self,
+        toplevel: &ToplevelSurface,
+    ) -> (Size<i32, Logical>, Size<i32, Logical>) {
         let (min_size, max_size) = with_states(toplevel.wl_surface(), |state| {
             let mut guard = state.cached_state.get::<SurfaceCachedState>();
             let current = guard.current();
             (current.min_size, current.max_size)
         });
-        let (min_size, max_size) = self.apply_min_max_size(min_size, max_size);
+        self.apply_min_max_size(min_size, max_size)
+    }
 
-        // We open fixed-height windows as floating.
-        min_size.h > 0 && min_size.h == max_size.h
+    /// Whether a new window takes the focus: as its `open-focused` rule says, else when it brings
+    /// an activation token. Without either, an overlay stays unfocused, as does any window under
+    /// the strict focus policy; others are activated by the layout's heuristics.
+    pub fn open_activation(
+        &self,
+        has_token: bool,
+        is_overlay: bool,
+        strict_policy: bool,
+    ) -> ActivateWindow {
+        match self.open_focused {
+            Some(true) => ActivateWindow::Yes,
+            Some(false) => ActivateWindow::No,
+            None if has_token => ActivateWindow::Yes,
+            None if is_overlay || strict_policy => ActivateWindow::No,
+            None => ActivateWindow::Smart,
+        }
+    }
+}
+
+/// How a window opens by its own hints, when no `open-floating` rule decides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenHint {
+    Tiled,
+    /// A dialog of a parent window, or a fixed-height window.
+    Floating,
+    /// On the canvas, a window with no parent that caps its size on both axes within the output
+    /// it opens on, its height not fixed, as Chromium's picture-in-picture windows do (at 80% of
+    /// the display). It need not fill a tile span: it floats in a corner at its own size, and
+    /// takes the focus only when it asks for activation. A cap larger than the output, such as
+    /// Firefox's (8102 or 13017 px on each axis), limits nothing and the window tiles.
+    Overlay,
+}
+
+impl OpenHint {
+    /// The hint for a window with or without a parent, its minimum and maximum size, opening on
+    /// an output of logical size `output`.
+    pub fn compute(
+        has_parent: bool,
+        min_size: Size<i32, Logical>,
+        max_size: Size<i32, Logical>,
+        output: Option<Size<i32, Logical>>,
+    ) -> Self {
+        if has_parent || (min_size.h > 0 && min_size.h == max_size.h) {
+            Self::Floating
+        } else if cfg!(feature = "canvas") && cap_fits(max_size, output) {
+            Self::Overlay
+        } else {
+            Self::Tiled
+        }
+    }
+}
+
+/// Whether maximum size `max` caps both axes within `output`, the logical size of the output a
+/// window opens on. Without a known output no cap counts.
+pub fn cap_fits(max: Size<i32, Logical>, output: Option<Size<i32, Logical>>) -> bool {
+    max.w > 0 && max.h > 0 && output.is_some_and(|o| max.w <= o.w && max.h <= o.h)
+}
+
+/// The logical size of `output`, in whole pixels, for [`OpenHint::compute`].
+pub fn open_output_size(output: &Output) -> Size<i32, Logical> {
+    output_size(output).to_i32_round()
+}
+
+/// Where an overlay opens when no `default-floating-position` rule places it: the bottom right
+/// corner of the working area, `gap` from its edges.
+pub fn overlay_position(gap: f64) -> FloatingPosition {
+    FloatingPosition {
+        x: FloatOrInt(gap),
+        y: FloatOrInt(gap),
+        relative_to: RelativeTo::BottomRight,
     }
 }
 
@@ -459,4 +555,111 @@ fn window_matches(window: WindowRef, role: &XdgToplevelSurfaceRoleAttributes, m:
     }
 
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn open_hints() {
+        let size = |w, h| Size::from((w, h));
+        let none = size(0, 0);
+        let fhd = Some(size(1920, 1080));
+        let hint = |parent, min, max| OpenHint::compute(parent, min, max, fhd);
+        assert_eq!(hint(true, none, none), OpenHint::Floating);
+        assert_eq!(hint(true, none, size(800, 600)), OpenHint::Floating);
+        assert_eq!(
+            hint(false, size(400, 300), size(400, 300)),
+            OpenHint::Floating
+        );
+        assert_eq!(hint(false, size(0, 300), size(0, 300)), OpenHint::Floating);
+        assert_eq!(hint(false, none, none), OpenHint::Tiled);
+        assert_eq!(hint(false, size(500, 400), none), OpenHint::Tiled);
+        assert_eq!(hint(false, none, size(800, 0)), OpenHint::Tiled);
+
+        // Chromium's picture-in-picture windows on a 2560x1440 display.
+        let qhd = Some(size(2560, 1440));
+        let pip = OpenHint::compute(false, size(240, 52), size(2048, 1152), qhd);
+        let overlay = if cfg!(feature = "canvas") {
+            OpenHint::Overlay
+        } else {
+            OpenHint::Tiled
+        };
+        assert_eq!(pip, overlay);
+    }
+
+    /// Chromium's picture-in-picture caps itself at 80% of the display and stays an overlay;
+    /// Firefox's cap is far larger than any output and limits nothing, so it tiles.
+    #[test]
+    fn a_cap_counts_only_within_the_output() {
+        let size = |w, h| Size::from((w, h));
+        let fhd = Some(size(1920, 1080));
+        let overlay = if cfg!(feature = "canvas") {
+            OpenHint::Overlay
+        } else {
+            OpenHint::Tiled
+        };
+        let firefox = OpenHint::compute(false, size(500, 120), size(8102, 8102), fhd);
+        assert_eq!(firefox, OpenHint::Tiled, "Firefox's 8102 cap tiles");
+        let wide = OpenHint::compute(
+            false,
+            size(500, 120),
+            size(13017, 13017),
+            Some(size(4096, 1152)),
+        );
+        assert_eq!(wide, OpenHint::Tiled, "and its 13017 cap on a wide output");
+        let pip = OpenHint::compute(false, size(240, 52), size(1536, 864), fhd);
+        assert_eq!(pip, overlay, "PiP at 80% of 1920x1080");
+        let pip = OpenHint::compute(
+            false,
+            size(248, 90),
+            size(3277, 922),
+            Some(size(4096, 1152)),
+        );
+        assert_eq!(pip, overlay, "PiP at 80% of 4096x1152");
+        let whole = OpenHint::compute(false, size(240, 52), size(1920, 1080), fhd);
+        assert_eq!(whole, overlay, "a cap of the whole output still fits");
+        let taller = OpenHint::compute(false, size(240, 52), size(1536, 1081), fhd);
+        assert_eq!(taller, OpenHint::Tiled, "one axis past the output: no cap");
+        let unknown = OpenHint::compute(false, size(240, 52), size(1536, 864), None);
+        assert_eq!(unknown, OpenHint::Tiled, "no output, no cap");
+
+        let fixed = OpenHint::compute(false, size(812, 124), size(812, 124), fhd);
+        assert_eq!(fixed, OpenHint::Floating, "a fixed height floats");
+        let fixed = OpenHint::compute(false, size(400, 300), size(9000, 300), fhd);
+        assert_eq!(fixed, OpenHint::Floating, "whatever its width cap");
+        let dialog = OpenHint::compute(true, size(0, 0), size(8102, 8102), fhd);
+        assert_eq!(dialog, OpenHint::Floating, "a child floats");
+
+        assert!(cap_fits(size(1536, 864), fhd));
+        assert!(!cap_fits(size(1536, 0), fhd));
+        assert!(!cap_fits(size(8102, 8102), fhd));
+    }
+
+    #[test]
+    fn open_activation() {
+        let rules = |open_focused| ResolvedWindowRules {
+            open_focused,
+            ..ResolvedWindowRules::default()
+        };
+        let none = rules(None);
+        assert_eq!(
+            none.open_activation(false, false, false),
+            ActivateWindow::Smart
+        );
+        assert_eq!(none.open_activation(false, true, false), ActivateWindow::No);
+        assert_eq!(none.open_activation(false, false, true), ActivateWindow::No);
+        assert_eq!(none.open_activation(true, true, true), ActivateWindow::Yes);
+        let focused = rules(Some(true));
+        assert_eq!(
+            focused.open_activation(false, true, true),
+            ActivateWindow::Yes
+        );
+        let unfocused = rules(Some(false));
+        assert_eq!(
+            unfocused.open_activation(true, false, false),
+            ActivateWindow::No
+        );
+    }
 }

@@ -7,11 +7,21 @@ use niri_config::{CornerRadius, LayoutPart};
 use smithay::backend::renderer::element::utils::{
     CropRenderElement, Relocate, RelocateRenderElement, RescaleRenderElement,
 };
+#[cfg(feature = "canvas")]
+use smithay::backend::renderer::element::{Id, Kind};
+#[cfg(feature = "canvas")]
+use smithay::backend::renderer::utils::CommitCounter;
+#[cfg(feature = "canvas")]
+use smithay::backend::renderer::Color32F;
 use smithay::output::Output;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 
+#[cfg(feature = "canvas")]
+use super::canvas::Column;
 use super::insert_hint_element::{InsertHintElement, InsertHintRenderElement};
-use super::scrolling::{Column, ColumnWidth};
+#[cfg(not(feature = "canvas"))]
+use super::scrolling::Column;
+use super::scrolling::ColumnWidth;
 use super::tile::Tile;
 use super::workspace::{
     compute_working_area, OutputId, Workspace, WorkspaceAddWindowTarget, WorkspaceId,
@@ -89,6 +99,9 @@ pub struct Monitor<W: LayoutElement> {
     pub(super) options: Rc<Options>,
     /// Layout config overrides for this monitor.
     layout_config: Option<niri_config::LayoutPart>,
+    /// Render element ids of the overview dim's four bands.
+    #[cfg(feature = "canvas")]
+    dim_ids: [Id; 4],
 }
 
 #[derive(Debug)]
@@ -130,6 +143,7 @@ pub struct WorkspaceSwitchGesture {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum InsertPosition {
     NewColumn(usize),
+    #[cfg_attr(feature = "canvas", allow(dead_code))]
     InColumn(usize, usize),
     Floating,
 }
@@ -196,6 +210,30 @@ niri_render_elements! {
 
 pub type MonitorRenderElement<R> =
     RelocateRenderElement<RescaleRenderElement<MonitorInnerRenderElement<R>>>;
+
+/// A workspace on an output, with its index and its render geometry.
+type DrawnWorkspace<'a, W> = ((usize, &'a Workspace<W>), Rectangle<f64, Logical>);
+
+/// The parts of an output of `size` outside `hole`: above, below, left and right of it.
+#[cfg(feature = "canvas")]
+pub(super) fn dim_bands(
+    size: Size<f64, Logical>,
+    hole: Rectangle<f64, Logical>,
+) -> [Rectangle<f64, Logical>; 4] {
+    let x0 = hole.loc.x.clamp(0., size.w);
+    let x1 = (hole.loc.x + hole.size.w).clamp(x0, size.w);
+    let y0 = hole.loc.y.clamp(0., size.h);
+    let y1 = (hole.loc.y + hole.size.h).clamp(y0, size.h);
+    let rect = |x0: f64, y0: f64, x1: f64, y1: f64| {
+        Rectangle::new(Point::from((x0, y0)), Size::from((x1 - x0, y1 - y0)))
+    };
+    [
+        rect(0., 0., size.w, y0),
+        rect(0., y1, size.w, size.h),
+        rect(0., y0, x0, y1),
+        rect(x1, y0, size.w, y1),
+    ]
+}
 
 impl WorkspaceSwitch {
     pub fn current_idx(&self) -> f64 {
@@ -325,10 +363,13 @@ impl<W: LayoutElement> Monitor<W> {
             active_workspace_idx += 1;
         }
 
-        let ws = Workspace::new(output.clone(), clock.clone(), options.clone());
-        workspaces.push(ws);
+        // One workspace per output needs no empty one at the end.
+        if !options.one_workspace() || workspaces.is_empty() {
+            let ws = Workspace::new(output.clone(), clock.clone(), options.clone());
+            workspaces.push(ws);
+        }
 
-        Self {
+        let mut monitor = Self {
             output_name: output.name(),
             output,
             scale,
@@ -347,7 +388,11 @@ impl<W: LayoutElement> Monitor<W> {
             base_options,
             options,
             layout_config,
-        }
+            #[cfg(feature = "canvas")]
+            dim_ids: std::array::from_fn(|_| Id::new()),
+        };
+        monitor.merge_workspaces();
+        monitor
     }
 
     pub fn into_workspaces(mut self) -> Vec<Workspace<W>> {
@@ -413,6 +458,10 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn add_workspace_at(&mut self, idx: usize) {
+        if self.options.one_workspace() && !self.workspaces.is_empty() {
+            return;
+        }
+
         let ws = Workspace::new(
             self.output.clone(),
             self.clock.clone(),
@@ -719,6 +768,11 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn insert_workspace(&mut self, mut ws: Workspace<W>, mut idx: usize, activate: bool) {
+        if self.options.one_workspace() {
+            self.merge_workspace(ws);
+            return;
+        }
+
         ws.set_output(Some(self.output.clone()));
         ws.update_config(self.options.clone());
 
@@ -748,6 +802,13 @@ impl<W: LayoutElement> Monitor<W> {
     }
 
     pub fn append_workspaces(&mut self, mut workspaces: Vec<Workspace<W>>) {
+        if self.options.one_workspace() {
+            for ws in workspaces {
+                self.merge_workspace(ws);
+            }
+            return;
+        }
+
         if workspaces.is_empty() {
             return;
         }
@@ -782,6 +843,52 @@ impl<W: LayoutElement> Monitor<W> {
         // (outside the workspace switch), we don't need to cancel it.
         self.workspace_switch = None;
         self.clean_up_workspaces();
+    }
+
+    /// With `one-workspace`, gathers the windows of every other workspace onto the active one and
+    /// removes the rest, names and all.
+    fn merge_workspaces(&mut self) {
+        if !self.options.one_workspace() {
+            return;
+        }
+
+        for ws in &mut self.workspaces {
+            ws.unname();
+        }
+        // A switch in progress, a gesture's too, ends here even when there is one workspace
+        // already: with one-workspace nothing switches workspaces.
+        self.workspace_switch = None;
+        self.previous_workspace_id = None;
+        if self.workspaces.len() == 1 {
+            return;
+        }
+
+        let active = self.workspaces.remove(self.active_workspace_idx);
+        let others = std::mem::replace(&mut self.workspaces, vec![active]);
+        self.active_workspace_idx = 0;
+        for ws in others {
+            self.merge_workspace(ws);
+        }
+        self.workspaces[0].original_outputs = vec![OutputId::new(&self.output)];
+    }
+
+    /// Adds the windows of `ws` to the one workspace, as new windows keeping their size, at free
+    /// spots, without taking the focus.
+    fn merge_workspace(&mut self, mut ws: Workspace<W>) {
+        let ids: Vec<_> = ws.windows().map(|win| win.id().clone()).collect();
+        let target = &mut self.workspaces[self.active_workspace_idx];
+        for id in ids {
+            let removed = ws.remove_tile(&id, Transaction::new());
+            target.add_tile(
+                removed.tile,
+                WorkspaceAddWindowTarget::Auto,
+                ActivateWindow::No,
+                removed.width,
+                removed.is_full_width,
+                removed.is_floating,
+                None,
+            );
+        }
     }
 
     pub fn move_down_or_to_workspace_down(&mut self) {
@@ -936,39 +1043,51 @@ impl<W: LayoutElement> Monitor<W> {
             return;
         }
 
-        let Some(id) = workspace.scrolling().active_column().map(Column::id) else {
-            return;
-        };
-        let mut old_render_pos = workspace
-            .scrolling()
-            .columns_with_render_positions()
-            .find_map(|(col, pos)| (col.id() == id).then_some(pos))
-            .unwrap();
+        // A canvas window keeps no column to animate between workspaces.
+        #[cfg(feature = "canvas")]
+        {
+            let Some(column) = workspace.remove_active_column() else {
+                return;
+            };
+            self.add_column(new_idx, column, activate, None);
+        }
 
-        let column = workspace.remove_active_column().unwrap();
+        #[cfg(not(feature = "canvas"))]
+        {
+            let Some(id) = workspace.scrolling().active_column().map(Column::id) else {
+                return;
+            };
+            let mut old_render_pos = workspace
+                .scrolling()
+                .columns_with_render_positions()
+                .find_map(|(col, pos)| (col.id() == id).then_some(pos))
+                .unwrap();
 
-        // Animate vertical movement between workspaces.
-        old_render_pos.y +=
-            self.workspace_size_with_gap(1.).h * (source_workspace_idx as f64 - new_idx as f64);
+            let column = workspace.remove_active_column().unwrap();
 
-        // If the view is following the column, match the animation.
-        let config = if activate {
-            self.options.animations.workspace_switch.0
-        } else {
-            self.options.animations.window_movement.0
-        };
+            // Animate vertical movement between workspaces.
+            old_render_pos.y +=
+                self.workspace_size_with_gap(1.).h * (source_workspace_idx as f64 - new_idx as f64);
 
-        let new_id = self.workspaces[new_idx].id();
-        self.add_column(new_idx, column, activate, Some(config));
+            // If the view is following the column, match the animation.
+            let config = if activate {
+                self.options.animations.workspace_switch.0
+            } else {
+                self.options.animations.window_movement.0
+            };
 
-        let new_idx = self.idx_of_ws(new_id).unwrap();
-        let (column, new_render_pos) = self.workspaces[new_idx]
-            .scrolling_mut()
-            .columns_with_render_positions_mut()
-            .find(|(col, _pos)| col.id() == id)
-            .unwrap();
-        column.animate_move_from_with_config(old_render_pos - new_render_pos, config);
-        column.set_anim_y_between_workspaces();
+            let new_id = self.workspaces[new_idx].id();
+            self.add_column(new_idx, column, activate, Some(config));
+
+            let new_idx = self.idx_of_ws(new_id).unwrap();
+            let (column, new_render_pos) = self.workspaces[new_idx]
+                .scrolling_mut()
+                .columns_with_render_positions_mut()
+                .find(|(col, _pos)| col.id() == id)
+                .unwrap();
+            column.animate_move_from_with_config(old_render_pos - new_render_pos, config);
+            column.set_anim_y_between_workspaces();
+        }
     }
 
     pub fn switch_workspace_up(&mut self) {
@@ -1209,6 +1328,17 @@ impl<W: LayoutElement> Monitor<W> {
 
         self.base_options = base_options;
         self.options = options;
+
+        if self.options.one_workspace() {
+            self.merge_workspaces();
+        } else if self.workspaces.len() == 1 && self.workspaces[0].has_windows_or_name() {
+            // Leaving one workspace: back to niri's empty workspace at the end (and above the
+            // first).
+            self.add_workspace_bottom();
+            if self.options.layout.empty_workspace_above_first {
+                self.add_workspace_top();
+            }
+        }
     }
 
     pub fn update_layout_config(&mut self, layout_config: Option<niri_config::LayoutPart>) -> bool {
@@ -1472,7 +1602,7 @@ impl<W: LayoutElement> Monitor<W> {
         }
     }
 
-    pub fn workspaces_render_geo(&self) -> impl Iterator<Item = Rectangle<f64, Logical>> {
+    pub fn workspaces_render_geo(&self) -> impl Iterator<Item = Rectangle<f64, Logical>> + use<W> {
         let scale = self.scale.fractional_scale();
         let zoom = self.overview_zoom();
 
@@ -1567,18 +1697,89 @@ impl<W: LayoutElement> Monitor<W> {
             .find_map(|(ws, geo)| geo.contains(pos_within_output).then_some(ws))
     }
 
+    /// Whether the overview draws the workspace at `idx` over all of the output rather than in
+    /// its own view: the active workspace of a canvas, whose windows reach past its view.
+    fn overview_shows_all(&self, idx: usize) -> bool {
+        #[cfg(feature = "canvas")]
+        {
+            self.overview_progress.is_some() && idx == self.active_workspace_idx
+        }
+        #[cfg(not(feature = "canvas"))]
+        {
+            let _ = idx;
+            false
+        }
+    }
+
+    /// The rectangle of the view of the workspace at `idx`, drawn at `geo`, that the output
+    /// shows, in that view's frame: the view itself, or all of the output at overview scale when
+    /// the overview [shows all](Self::overview_shows_all) of that workspace.
+    pub fn shown_area(&self, idx: usize, geo: Rectangle<f64, Logical>) -> Rectangle<f64, Logical> {
+        if self.overview_shows_all(idx) {
+            let zoom = self.overview_zoom();
+            Rectangle::new(geo.loc.upscale(-1. / zoom), self.view_size.downscale(zoom))
+        } else {
+            Rectangle::from_size(self.workspaces[idx].view_size())
+        }
+    }
+
+    /// The workspaces on the output with their render geometry, in the order they are drawn, top
+    /// first: one the overview [shows all](Self::overview_shows_all) of comes first, as its
+    /// windows reach over the others.
+    fn workspaces_drawn(&self) -> Vec<DrawnWorkspace<'_, W>> {
+        self.workspaces_drawn_cull(true)
+    }
+
+    /// [`Self::workspaces_drawn`], with the workspaces outside the output too when `cull` is
+    /// false.
+    fn workspaces_drawn_cull(&self, cull: bool) -> Vec<DrawnWorkspace<'_, W>> {
+        let output_geo = Rectangle::from_size(self.view_size);
+        let geo = self.workspaces_render_geo();
+        let mut drawn: Vec<_> = zip(self.workspaces.iter().enumerate(), geo)
+            .filter(|(_ws, geo)| !cull || geo.intersection(output_geo).is_some())
+            .collect();
+        drawn.sort_by_key(|((idx, _), _)| !self.overview_shows_all(*idx));
+        drawn
+    }
+
+    /// The canvas windows [`Self::render_workspaces`] draws, top first.
+    #[cfg(all(test, feature = "canvas"))]
+    pub fn drawn_canvas_windows(&self) -> Vec<W::Id> {
+        self.workspaces_drawn()
+            .into_iter()
+            .flat_map(|((idx, ws), geo)| ws.scrolling().drawn_windows(self.shown_area(idx, geo)))
+            .collect()
+    }
+
     pub fn window_under(&self, pos_within_output: Point<f64, Logical>) -> Option<(&W, HitType)> {
+        if self.overview_progress.is_some() {
+            let zoom = self.overview_zoom();
+            // A workspace the overview shows all of is drawn over the others, so it is hit first.
+            let hit = self
+                .workspaces_drawn()
+                .into_iter()
+                .take_while(|((idx, _), _)| self.overview_shows_all(*idx))
+                .find_map(|((idx, ws), geo)| {
+                    let pos_within_workspace = (pos_within_output - geo.loc).downscale(zoom);
+                    ws.window_under(pos_within_workspace, self.shown_area(idx, geo))
+                });
+            if let Some((win, hit)) = hit {
+                return Some((win, hit.to_activate()));
+            }
+        }
+
         let (ws, geo) = self.workspace_under(pos_within_output)?;
+        let view = Rectangle::from_size(ws.view_size());
 
         if self.overview_progress.is_some() {
             let zoom = self.overview_zoom();
             let pos_within_workspace = (pos_within_output - geo.loc).downscale(zoom);
-            let (win, hit) = ws.window_under(pos_within_workspace)?;
+            let (win, hit) = ws.window_under(pos_within_workspace, view)?;
             // During the overview animation, we cannot do input hits because we cannot really
             // represent scaled windows properly.
             Some((win, hit.to_activate()))
         } else {
-            let (win, hit) = ws.window_under(pos_within_output - geo.loc)?;
+            let (win, hit) = ws.window_under(pos_within_output - geo.loc, view)?;
             Some((win, hit.offset_win_pos(geo.loc)))
         }
     }
@@ -1602,6 +1803,11 @@ impl<W: LayoutElement> Monitor<W> {
 
         // Monitors always have at least one workspace.
         let ((idx, ws), geo) = iter.next().unwrap();
+
+        // With one workspace, everything drops onto it and nothing makes a new one.
+        if self.options.one_workspace() {
+            return (InsertWorkspace::Existing(ws.id()), geo);
+        }
 
         // Check if above first.
         if pos_within_output.y < geo.loc.y {
@@ -1692,6 +1898,11 @@ impl<W: LayoutElement> Monitor<W> {
         // Ceil the height in physical pixels.
         let height = (self.view_size.h * scale).ceil() as i32;
 
+        let unbounded = Rectangle::new(
+            Point::from((-i32::MAX / 2, -i32::MAX / 2)),
+            Size::from((i32::MAX, i32::MAX)),
+        );
+
         let zoom = self.overview_zoom();
 
         let insert_hint_render_loc = self
@@ -1743,16 +1954,21 @@ impl<W: LayoutElement> Monitor<W> {
                         Size::from((i32::MAX, height)),
                     )
                 } else {
-                    Rectangle::new(
-                        Point::from((-i32::MAX / 2, -i32::MAX / 2)),
-                        Size::from((i32::MAX, i32::MAX)),
-                    )
+                    unbounded
                 };
 
-            for (ws, geo) in self.workspaces_with_render_geo_cull(cull) {
+            for ((idx, ws), geo) in self.workspaces_drawn_cull(cull) {
+                // A workspace the overview shows all of reaches past its own view.
+                let crop_bounds = if self.overview_shows_all(idx) {
+                    unbounded
+                } else {
+                    crop_bounds
+                };
+                let shown = self.shown_area(idx, geo);
+
                 // Macro instead of closure because ws and insert hint have different elem types.
                 macro_rules! push {
-                    () => {{
+                    () => {
                         &mut |elem| {
                             let elem = CropRenderElement::from_element(elem, scale, crop_bounds);
                             if let Some(elem) = elem {
@@ -1760,7 +1976,7 @@ impl<W: LayoutElement> Monitor<W> {
                                 push(scale_relocate(geo, elem));
                             }
                         }
-                    }};
+                    };
                 }
 
                 let xray_pos = XrayPos::new(geo.loc, zoom);
@@ -1798,6 +2014,7 @@ impl<W: LayoutElement> Monitor<W> {
                         ws.render_scrolling(
                             ctx.r(),
                             xray_pos,
+                            shown,
                             focus_ring,
                             RenderLayer::MovingBetweenWorkspaces,
                             push!(),
@@ -1807,6 +2024,7 @@ impl<W: LayoutElement> Monitor<W> {
                         ws.render_scrolling(
                             ctx.r(),
                             xray_pos,
+                            shown,
                             focus_ring,
                             RenderLayer::Normal,
                             push!(),
@@ -1822,6 +2040,11 @@ impl<W: LayoutElement> Monitor<W> {
         renderer: &mut R,
         push: &mut dyn FnMut(MonitorRenderElement<R>),
     ) {
+        // The overview draws no box around a canvas workspace: its windows reach past it.
+        if cfg!(feature = "canvas") {
+            return;
+        }
+
         let Some(progress) = self.overview_progress.as_ref().map(|p| p.clamped_value()) else {
             return;
         };
@@ -1847,7 +2070,79 @@ impl<W: LayoutElement> Monitor<W> {
         }
     }
 
+    /// The background `ws` draws behind its windows. The overview draws no box around a canvas
+    /// workspace, so there the background fades out as the overview opens.
+    pub fn workspace_background(&self, ws: &Workspace<W>) -> Option<SolidColorRenderElement> {
+        // A transparent background (`background-color "transparent"`) would blend nothing over
+        // the whole output every frame.
+        if ws.background_is_transparent() {
+            return None;
+        }
+        #[cfg(feature = "canvas")]
+        {
+            let progress = self
+                .overview_progress
+                .as_ref()
+                .map_or(0., |p| p.clamped_value().clamp(0., 1.));
+            let alpha = (1. - progress) as f32;
+            (alpha > 0.).then(|| ws.render_background_with_alpha(alpha))
+        }
+        #[cfg(not(feature = "canvas"))]
+        {
+            Some(ws.render_background())
+        }
+    }
+
+    /// Where the overview draws the area the screen shows once it closes: the active
+    /// workspace's view, the canvas at its camera's zoom, at overview scale.
+    #[cfg(feature = "canvas")]
+    pub fn overview_display_area(&self) -> Option<Rectangle<f64, Logical>> {
+        self.overview_progress.as_ref()?;
+        self.workspaces_render_geo().nth(self.active_workspace_idx)
+    }
+
+    /// In the overview, dims everything outside [`Self::overview_display_area`] by the canvas's
+    /// `overview-dim`: windows, workspaces and the backdrop, not the top and overlay layers.
+    #[cfg(feature = "canvas")]
+    pub fn render_overview_dim<R: NiriRenderer>(
+        &self,
+        push: &mut dyn FnMut(MonitorRenderElement<R>),
+    ) {
+        let Some(progress) = self.overview_progress.as_ref().map(|p| p.clamped_value()) else {
+            return;
+        };
+        let alpha = (self.options.layout.canvas.overview_dim * progress.clamp(0., 1.)) as f32;
+        let Some(area) = self.overview_display_area().filter(|_| alpha > 0.) else {
+            return;
+        };
+        let color = Color32F::new(0., 0., 0., alpha);
+        for (id, band) in zip(&self.dim_ids, dim_bands(self.view_size, area)) {
+            if band.size.w <= 0. || band.size.h <= 0. {
+                continue;
+            }
+            let elem = SolidColorRenderElement::new(
+                id.clone(),
+                band,
+                CommitCounter::default(),
+                color,
+                Kind::Unspecified,
+            );
+            let elem = MonitorInnerRenderElement::SolidColor(elem);
+            let elem = RescaleRenderElement::from_element(elem, Point::default(), 1.);
+            push(RelocateRenderElement::from_element(
+                elem,
+                Point::default(),
+                Relocate::Relative,
+            ));
+        }
+    }
+
     pub fn workspace_switch_gesture_begin(&mut self, is_touchpad: bool) {
+        // With one workspace there is nowhere to switch to.
+        if self.options.one_workspace() {
+            return;
+        }
+
         let center_idx = self.active_workspace_idx;
         let current_idx = self.workspace_render_idx();
 
@@ -1875,8 +2170,8 @@ impl<W: LayoutElement> Monitor<W> {
             return;
         }
 
-        if !self.overview_open {
-            // This gesture is only for the overview.
+        if !self.overview_open || self.options.one_workspace() {
+            // This gesture is only for the overview, and only with workspaces to scroll through.
             return;
         }
 
@@ -2136,6 +2431,22 @@ impl<W: LayoutElement> Monitor<W> {
         );
         assert!(self.active_workspace_idx < self.workspaces.len());
 
+        if self.options.one_workspace() {
+            assert_eq!(
+                self.workspaces.len(),
+                1,
+                "with one-workspace a monitor has exactly one workspace"
+            );
+            assert!(
+                self.workspace_switch.is_none(),
+                "with one-workspace nothing switches workspaces"
+            );
+            assert!(
+                self.workspaces[0].name.is_none(),
+                "with one-workspace the workspace is unnamed"
+            );
+        }
+
         if let Some(WorkspaceSwitch::Animation(anim)) = &self.workspace_switch {
             let before_idx = anim.from() as usize;
             let after_idx = anim.to() as usize;
@@ -2145,7 +2456,7 @@ impl<W: LayoutElement> Monitor<W> {
         }
 
         assert!(
-            !self.workspaces.last().unwrap().has_windows(),
+            self.options.one_workspace() || !self.workspaces.last().unwrap().has_windows(),
             "monitor must have an empty workspace in the end"
         );
         if self.options.layout.empty_workspace_above_first {

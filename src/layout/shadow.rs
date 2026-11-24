@@ -11,6 +11,8 @@ pub struct Shadow {
     shader_rects: Vec<Rectangle<f64, Logical>>,
     shaders: Vec<ShadowRenderElement>,
     config: niri_config::Shadow,
+    /// Whether the shadow's color is fully transparent, so drawing it would change no pixel.
+    invisible: bool,
 }
 
 impl Shadow {
@@ -19,6 +21,7 @@ impl Shadow {
             shader_rects: Vec::new(),
             shaders: Vec::new(),
             config,
+            invisible: false,
         }
     }
 
@@ -81,6 +84,7 @@ impl Shadow {
                 .inactive_color
                 .unwrap_or(self.config.color * 0.75)
         };
+        self.invisible = color.a * alpha == 0.;
 
         let shader_geo = Rectangle::new(Point::from((-width, -width)), shader_size);
 
@@ -168,7 +172,7 @@ impl Shadow {
         location: Point<f64, Logical>,
         push: &mut dyn FnMut(ShadowRenderElement),
     ) {
-        if !self.config.on {
+        if !self.config.on || self.invisible {
             return;
         }
 

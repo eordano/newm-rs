@@ -20,6 +20,9 @@ pub struct FocusRing {
     use_border_shader: bool,
     config: niri_config::FocusRing,
     thicken_corners: bool,
+    /// Whether every color it would draw is fully transparent, so drawing it would change no
+    /// pixel.
+    invisible: bool,
 }
 
 niri_render_elements! {
@@ -39,6 +42,7 @@ impl FocusRing {
             full_size: Default::default(),
             is_border: false,
             use_border_shader: false,
+            invisible: false,
             config,
             thicken_corners: true,
         }
@@ -93,6 +97,11 @@ impl FocusRing {
         };
 
         self.use_border_shader = radius != CornerRadius::default() || gradient.is_some();
+        self.invisible = alpha == 0.
+            || match gradient {
+                Some(g) => g.from.a == 0. && g.to.a == 0.,
+                None => color.a == 0.,
+            };
 
         // Set the defaults for solid color + rounded corners.
         let gradient = gradient.unwrap_or_else(|| Gradient::from(color));
@@ -221,7 +230,7 @@ impl FocusRing {
         location: Point<f64, Logical>,
         push: &mut dyn FnMut(FocusRingRenderElement),
     ) {
-        if self.config.off {
+        if self.config.off || self.invisible {
             return;
         }
 

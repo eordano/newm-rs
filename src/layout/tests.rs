@@ -14,6 +14,8 @@ use smithay::utils::Rectangle;
 use super::*;
 
 mod animations;
+#[cfg(feature = "canvas")]
+mod canvas;
 mod fullscreen;
 
 impl<W: LayoutElement> Default for Layout<W> {
@@ -41,6 +43,14 @@ struct TestWindowInner {
     animate_next_configure: Cell<bool>,
     animation_snapshot: RefCell<Option<LayoutElementRenderSnapshot>>,
     rules: ResolvedWindowRules,
+    /// Whether the window's bounding box takes pointer input; off, every hit only activates.
+    has_input_region: Cell<bool>,
+    /// Whether a size was requested that the window has not committed to yet.
+    size_pending: Cell<bool>,
+    #[cfg(feature = "canvas")]
+    app_id: Option<String>,
+    #[cfg(feature = "canvas")]
+    title: RefCell<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +69,12 @@ struct TestWindowParams {
     min_max_size: (Size<i32, Logical>, Size<i32, Logical>),
     #[proptest(strategy = "prop::option::of(arbitrary_rules())")]
     rules: Option<ResolvedWindowRules>,
+    #[cfg(feature = "canvas")]
+    #[proptest(value = "None")]
+    app_id: Option<String>,
+    #[cfg(feature = "canvas")]
+    #[proptest(value = "None")]
+    title: Option<String>,
 }
 
 impl TestWindowParams {
@@ -70,6 +86,10 @@ impl TestWindowParams {
             bbox: Rectangle::from_size(Size::from((100, 200))),
             min_max_size: Default::default(),
             rules: None,
+            #[cfg(feature = "canvas")]
+            app_id: None,
+            #[cfg(feature = "canvas")]
+            title: None,
         }
     }
 }
@@ -93,11 +113,22 @@ impl TestWindow {
             animate_next_configure: Cell::new(false),
             animation_snapshot: RefCell::new(None),
             rules: params.rules.unwrap_or_default(),
+            has_input_region: Cell::new(false),
+            size_pending: Cell::new(false),
+            #[cfg(feature = "canvas")]
+            app_id: params.app_id,
+            #[cfg(feature = "canvas")]
+            title: RefCell::new(params.title),
         }))
     }
 
     fn communicate(&self) -> bool {
         let mut changed = false;
+
+        // On the canvas, a commit that acks a requested size reaches the layout even when the
+        // size stays.
+        let acked = self.0.size_pending.replace(false);
+        changed |= acked && cfg!(feature = "canvas");
 
         let size = self.0.forced_size.get().or(self.0.requested_size.get());
         if let Some(size) = size {
@@ -164,8 +195,8 @@ impl LayoutElement for TestWindow {
         (0, 0).into()
     }
 
-    fn is_in_input_region(&self, _point: Point<f64, Logical>) -> bool {
-        false
+    fn is_in_input_region(&self, point: Point<f64, Logical>) -> bool {
+        self.0.has_input_region.get() && self.0.bbox.get().to_f64().contains(point)
     }
 
     fn request_size(
@@ -178,6 +209,7 @@ impl LayoutElement for TestWindow {
         if self.0.requested_size.get() != Some(size) {
             self.0.requested_size.set(Some(size));
             self.0.animate_next_configure.set(true);
+            self.0.size_pending.set(true);
         }
 
         self.0.pending_sizing_mode.set(mode);
@@ -281,6 +313,21 @@ impl LayoutElement for TestWindow {
 
     fn is_urgent(&self) -> bool {
         false
+    }
+
+    #[cfg(feature = "canvas")]
+    fn is_size_settled(&self) -> bool {
+        !self.0.size_pending.get()
+    }
+
+    #[cfg(feature = "canvas")]
+    fn app_id(&self) -> Option<String> {
+        self.0.app_id.clone()
+    }
+
+    #[cfg(feature = "canvas")]
+    fn title(&self) -> Option<String> {
+        self.0.title.borrow().clone()
     }
 }
 
@@ -3433,6 +3480,7 @@ fn move_workspace_to_same_monitor_doesnt_reorder() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn removing_window_above_preserves_focused_window() {
     let ops = [
         Op::AddOutput(0),
@@ -3458,6 +3506,7 @@ fn removing_window_above_preserves_focused_window() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn preset_column_width_fixed_correct_with_border() {
     let ops = [
         Op::AddOutput(0),
@@ -3505,6 +3554,7 @@ fn preset_column_width_fixed_correct_with_border() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn preset_column_width_reset_after_set_width() {
     let ops = [
         Op::AddOutput(0),
@@ -3705,6 +3755,7 @@ fn unmaximize_during_fullscreen_does_not_float() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn move_column_to_workspace_maximize_and_fullscreen() {
     let ops = [
         Op::AddOutput(1),
@@ -4007,8 +4058,16 @@ prop_compose! {
         center_focused_column in prop::option::of(arbitrary_center_focused_column()),
         always_center_single_column in prop::option::of(any::<bool>().prop_map(Flag)),
         empty_workspace_above_first in prop::option::of(any::<bool>().prop_map(Flag)),
+        one_workspace in prop::option::of(any::<bool>().prop_map(Flag)),
     ) -> niri_config::LayoutPart {
+        #[cfg(not(feature = "canvas"))]
+        let _ = one_workspace;
         niri_config::LayoutPart {
+            #[cfg(feature = "canvas")]
+            canvas: one_workspace.map(|one_workspace| niri_config::canvas::CanvasPart {
+                one_workspace: Some(one_workspace),
+                ..Default::default()
+            }),
             gaps,
             struts,
             center_focused_column,

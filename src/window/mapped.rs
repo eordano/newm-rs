@@ -80,6 +80,9 @@ pub struct Mapped {
     /// resizes immediately, without waiting for a 1 second throttled callback.
     needs_frame_callback: bool,
 
+    /// Whether xwayland-satellite serves this window, so it is an X11 window.
+    is_x11: bool,
+
     /// Data of the offscreen element rendered in place of this window.
     ///
     /// If `None`, then the window is not offscreened.
@@ -134,6 +137,11 @@ pub struct Mapped {
     ///
     /// Used for double-resize-click tracking.
     last_interactive_resize_start: Cell<Option<(Duration, ResizeEdge)>>,
+
+    /// The host this terminal window is connected to with ssh, as the session saver last found
+    /// it (see `session::Saver::remote_host`).
+    #[cfg(feature = "canvas")]
+    remote_host: RefCell<Option<String>>,
 
     /// Whether this window is in windowed (fake) fullscreen.
     ///
@@ -279,6 +287,9 @@ impl Mapped {
     pub fn new(window: Window, rules: ResolvedWindowRules, hook: HookId, config: &Config) -> Self {
         let surface = window.wl_surface().expect("no X11 support");
         let credentials = get_credentials_for_surface(&surface);
+        let is_x11 = credentials
+            .as_ref()
+            .is_some_and(|c| crate::utils::xwayland::is_satellite_pid(c.pid));
         let mut rv = Self {
             window,
             id: MappedId::next(),
@@ -288,6 +299,7 @@ impl Mapped {
             need_to_recompute_rules: false,
             needs_configure: false,
             needs_frame_callback: false,
+            is_x11,
             offscreen_data: RefCell::new(None),
             is_urgent: false,
             is_focused: false,
@@ -305,6 +317,8 @@ impl Mapped {
             pending_transactions: Vec::new(),
             interactive_resize: None,
             last_interactive_resize_start: Cell::new(None),
+            #[cfg(feature = "canvas")]
+            remote_host: RefCell::new(None),
             is_windowed_fullscreen: false,
             is_pending_windowed_fullscreen: false,
             uncommitted_windowed_fullscreen: Vec::new(),
@@ -365,6 +379,10 @@ impl Mapped {
 
     pub fn credentials(&self) -> Option<&Credentials> {
         self.credentials.as_ref()
+    }
+
+    pub fn is_x11(&self) -> bool {
+        self.is_x11
     }
 
     pub fn offscreen_data(&self) -> Ref<'_, Option<OffscreenData>> {
@@ -493,6 +511,11 @@ impl Mapped {
         }
 
         rv
+    }
+
+    #[cfg(feature = "canvas")]
+    pub fn set_remote_host(&self, host: Option<String>) {
+        self.remote_host.replace(host);
     }
 
     pub fn last_interactive_resize_start(&self) -> &Cell<Option<(Duration, ResizeEdge)>> {
@@ -1398,6 +1421,37 @@ impl LayoutElement for Mapped {
 
     fn interactive_resize_data(&self) -> Option<InteractiveResizeData> {
         Some(self.interactive_resize.as_ref()?.data())
+    }
+
+    #[cfg(feature = "canvas")]
+    fn app_id(&self) -> Option<String> {
+        with_toplevel_role(self.toplevel(), |role| role.app_id.clone())
+    }
+
+    #[cfg(feature = "canvas")]
+    fn title(&self) -> Option<String> {
+        with_toplevel_role(self.toplevel(), |role| role.title.clone())
+    }
+
+    #[cfg(feature = "canvas")]
+    fn remote_host(&self) -> Option<String> {
+        self.remote_host.borrow().clone()
+    }
+
+    #[cfg(feature = "canvas")]
+    fn is_size_settled(&self) -> bool {
+        let unsent = with_states(self.toplevel().wl_surface(), |states| {
+            let role = states
+                .data_map
+                .get::<XdgToplevelSurfaceData>()
+                .unwrap()
+                .lock()
+                .unwrap();
+            role.server_pending
+                .as_ref()
+                .is_some_and(|pending| pending.size != role.current_server_state().size)
+        });
+        !unsent && with_toplevel_last_uncommitted_configure(self.toplevel(), |c| c.is_none())
     }
 
     fn on_commit(&mut self, commit_serial: Serial) {

@@ -17,10 +17,14 @@ use smithay::utils::{Logical, Point, Rectangle, Serial, Size, Transform};
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::shell::xdg::SurfaceCachedState;
 
-use super::floating::{FloatingSpace, FloatingSpaceRenderElement};
-use super::scrolling::{
-    Column, ColumnWidth, ScrollDirection, ScrollingSpace, ScrollingSpaceRenderElement,
+#[cfg(feature = "canvas")]
+use super::canvas::{
+    CanvasSpace as ScrollingSpace, CanvasSpaceRenderElement as ScrollingSpaceRenderElement, Column,
 };
+use super::floating::{FloatingSpace, FloatingSpaceRenderElement, Follow};
+#[cfg(not(feature = "canvas"))]
+use super::scrolling::{Column, ScrollingSpace, ScrollingSpaceRenderElement};
+use super::scrolling::{ColumnWidth, ScrollDirection};
 use super::shadow::Shadow;
 use super::tile::{Tile, TileRenderSnapshot};
 use super::{
@@ -50,6 +54,10 @@ pub struct Workspace<W: LayoutElement> {
 
     /// The floating layout.
     floating: FloatingSpace<W>,
+
+    /// The floating windows that follow the canvas camera (see [`follow`]).
+    #[cfg(feature = "canvas")]
+    follow: Vec<follow::Anchor<W::Id>>,
 
     /// Whether the floating layout is active instead of the scrolling layout.
     floating_is_active: FloatingActive,
@@ -123,6 +131,9 @@ impl OutputId {
         output_name.matches(&self.0)
     }
 }
+
+#[cfg(feature = "canvas")]
+mod follow;
 
 static WORKSPACE_ID_COUNTER: IdCounter = IdCounter::new();
 
@@ -261,6 +272,8 @@ impl<W: LayoutElement> Workspace<W> {
         Self {
             scrolling,
             floating,
+            #[cfg(feature = "canvas")]
+            follow: Vec::new(),
             floating_is_active: FloatingActive::No,
             original_outputs,
             scale,
@@ -323,6 +336,8 @@ impl<W: LayoutElement> Workspace<W> {
         Self {
             scrolling,
             floating,
+            #[cfg(feature = "canvas")]
+            follow: Vec::new(),
             floating_is_active: FloatingActive::No,
             output: None,
             scale,
@@ -383,10 +398,19 @@ impl<W: LayoutElement> Workspace<W> {
             .update_render_elements(is_active && !self.floating_is_active.get(), layer);
 
         let view_rect = Rectangle::from_size(self.view_size);
+        let follows: Vec<_> = self
+            .floating
+            .tiles()
+            .filter_map(|tile| {
+                let id = tile.window().id();
+                Some((id.clone(), self.follow_of(id)?))
+            })
+            .collect();
         self.floating.update_render_elements(
             is_active && self.floating_is_active.get(),
             view_rect,
             layer,
+            &|id| follows.iter().find(|(f, _)| f == id).map(|(_, f)| *f),
         );
 
         if layer.is_normal() {
@@ -431,6 +455,8 @@ impl<W: LayoutElement> Workspace<W> {
 
         self.base_options = base_options;
         self.options = options;
+        #[cfg(feature = "canvas")]
+        self.sync_follow();
     }
 
     pub fn update_layout_config(&mut self, layout_config: Option<niri_config::LayoutPart>) {
@@ -687,18 +713,20 @@ impl<W: LayoutElement> Workspace<W> {
                         self.floating.add_tile_above(next_to, tile, activate);
                     } else {
                         // FIXME: use static pos
-                        let (next_to_tile, render_pos, _visible) = self
+                        let (next_to_size, render_pos) = self
                             .scrolling
                             .tiles_with_render_positions()
                             .find(|(tile, _, _)| tile.window().id() == next_to)
+                            .map(|(tile, pos, _)| (tile.tile_size(), pos))
                             .unwrap();
+                        let (render_pos, scale) = self.tile_frame_to_view(next_to, render_pos);
+                        let next_to_size = next_to_size.upscale(scale);
 
                         // Position the new tile in the center above the next_to tile. Think a
                         // dialog opening on top of a window.
                         let tile_size = tile.tile_size();
                         let pos = render_pos
-                            + (next_to_tile.tile_size().to_point() - tile_size.to_point())
-                                .downscale(2.);
+                            + (next_to_size.to_point() - tile_size.to_point()).downscale(2.);
                         let pos = self.floating.clamp_within_working_area(pos, tile_size);
                         let pos = self.floating.logical_to_size_frac(pos);
                         tile.floating_pos = Some(pos);
@@ -732,6 +760,9 @@ impl<W: LayoutElement> Workspace<W> {
                 }
             }
         }
+
+        #[cfg(feature = "canvas")]
+        self.sync_follow();
     }
 
     pub fn add_tile_to_column(
@@ -781,6 +812,8 @@ impl<W: LayoutElement> Workspace<W> {
     }
 
     pub fn remove_tile(&mut self, id: &W::Id, transaction: Transaction) -> RemovedTile<W> {
+        #[cfg(feature = "canvas")]
+        self.follow.retain(|anchor| anchor.window != *id);
         let mut from_floating = false;
         let removed = if self.floating.has_window(id) {
             from_floating = true;
@@ -1473,6 +1506,9 @@ impl<W: LayoutElement> Workspace<W> {
             .unwrap();
 
         tile.animate_move_from(render_pos - new_render_pos);
+
+        #[cfg(feature = "canvas")]
+        self.sync_follow();
     }
 
     pub fn set_window_floating(&mut self, id: Option<&W::Id>, floating: bool) {
@@ -1624,6 +1660,51 @@ impl<W: LayoutElement> Workspace<W> {
         floating.chain(scrolling)
     }
 
+    /// Where `window`'s tile shows in the view, and the scale it is drawn at: a zoomed canvas
+    /// draws its grid tiles through its camera.
+    pub fn tile_view_geo(&self, window: &W::Id) -> Option<(&Tile<W>, Point<f64, Logical>, f64)> {
+        let (tile, pos, _) = self
+            .tiles_with_render_positions()
+            .find(|(tile, _, _)| tile.window().id() == window)?;
+        let (pos, scale) = self.tile_frame_to_view(window, pos);
+        Some((tile, pos, scale))
+    }
+
+    /// `pos` in the frame `window`'s tile renders in, in the view, and the scale of that frame.
+    pub fn tile_frame_to_view(
+        &self,
+        window: &W::Id,
+        pos: Point<f64, Logical>,
+    ) -> (Point<f64, Logical>, f64) {
+        if let Some(f) = self.follow_of(window) {
+            return (f.to_view(pos), f.scale);
+        }
+        #[cfg(feature = "canvas")]
+        if !self.floating.has_window(window) {
+            let camera = self.scrolling.tile_camera(window);
+            return (camera.to_view(pos), camera.scale);
+        }
+        (pos, 1.)
+    }
+
+    /// `pos` in the view, in the frame `window`'s tile renders in.
+    fn view_to_tile_frame(&self, window: &W::Id, pos: Point<f64, Logical>) -> Point<f64, Logical> {
+        if let Some(f) = self.follow_of(window) {
+            return f.from_view(pos);
+        }
+        #[cfg(feature = "canvas")]
+        if !self.floating.has_window(window) {
+            return self.scrolling.tile_camera(window).from_view(pos);
+        }
+        pos
+    }
+
+    /// How the view draws floating window `window`, when it follows the canvas.
+    #[cfg(not(feature = "canvas"))]
+    fn follow_of(&self, _window: &W::Id) -> Option<Follow> {
+        None
+    }
+
     pub fn tiles_with_render_positions_mut(
         &mut self,
         round: bool,
@@ -1641,7 +1722,16 @@ impl<W: LayoutElement> Workspace<W> {
 
     pub fn active_window_visual_rectangle(&self) -> Option<Rectangle<f64, Logical>> {
         if self.floating_is_active.get() {
-            self.floating.active_window_visual_rectangle()
+            let id = self.floating.active_window()?.id();
+            let Some(f) = self.follow_of(id) else {
+                return self.floating.active_window_visual_rectangle();
+            };
+            let (tile, pos) = self
+                .floating
+                .tiles_with_offsets()
+                .find(|(tile, _)| tile.window().id() == id)?;
+            let rect = Rectangle::new(pos + tile.window_loc(), tile.window_size());
+            self.working_area.intersection(f.rect_to_view(rect))
         } else {
             self.scrolling.active_window_visual_rectangle()
         }
@@ -1653,25 +1743,46 @@ impl<W: LayoutElement> Workspace<W> {
         overflow: bool,
     ) -> Option<Rectangle<f64, Logical>> {
         if self.floating.has_window(window) {
-            self.floating.popup_target_rect(window)
+            let mut target = self.floating.popup_target_rect(window)?;
+            if let Some(f) = self.follow_of(window) {
+                let shown = f.rect_from_view(self.working_area);
+                target.loc += shown.loc - self.working_area.loc;
+                target.size = shown.size;
+            }
+            Some(target)
         } else {
             self.scrolling.popup_target_rect(window, overflow)
         }
     }
 
+    /// Renders the tiled windows. `shown` is the rectangle of the view the output shows: the view
+    /// itself, or for a canvas in the overview all of the output at overview scale.
     pub fn render_scrolling<R: NiriRenderer>(
         &self,
         ctx: RenderCtx<R>,
         xray_pos: XrayPos,
+        shown: Rectangle<f64, Logical>,
         focus_ring: bool,
         layer: RenderLayer,
         push: &mut dyn FnMut(WorkspaceRenderElement<R>),
     ) {
         let scrolling_focus_ring = focus_ring && !self.floating_is_active();
-        self.scrolling
-            .render(ctx, xray_pos, scrolling_focus_ring, layer, &mut |elem| {
-                push(elem.into())
-            });
+        let mut push_tiled = |elem: ScrollingSpaceRenderElement<R>| push(elem.into());
+        #[cfg(feature = "canvas")]
+        self.scrolling.render(
+            ctx,
+            xray_pos,
+            shown,
+            scrolling_focus_ring,
+            layer,
+            &mut push_tiled,
+        );
+        #[cfg(not(feature = "canvas"))]
+        {
+            let _ = shown;
+            self.scrolling
+                .render(ctx, xray_pos, scrolling_focus_ring, layer, &mut push_tiled);
+        }
     }
 
     pub fn render_floating<R: NiriRenderer>(
@@ -1694,6 +1805,7 @@ impl<W: LayoutElement> Workspace<W> {
             view_rect,
             floating_focus_ring,
             layer,
+            &|id| self.follow_of(id),
             &mut |elem| push(elem.into()),
         );
     }
@@ -1706,11 +1818,26 @@ impl<W: LayoutElement> Workspace<W> {
         self.shadow.render(renderer, Point::from((0., 0.)), push);
     }
 
+    /// Whether the background is fully transparent: drawing it would change no pixel.
+    pub fn background_is_transparent(&self) -> bool {
+        self.background_buffer.color().a() == 0.
+    }
+
     pub fn render_background(&self) -> SolidColorRenderElement {
         SolidColorRenderElement::from_buffer(
             &self.background_buffer,
             Point::new(0., 0.),
             1.,
+            Kind::Unspecified,
+        )
+    }
+
+    #[cfg(feature = "canvas")]
+    pub fn render_background_with_alpha(&self, alpha: f32) -> SolidColorRenderElement {
+        SolidColorRenderElement::from_buffer(
+            &self.background_buffer,
+            Point::new(0., 0.),
+            alpha,
             Kind::Unspecified,
         )
     }
@@ -1769,8 +1896,9 @@ impl<W: LayoutElement> Workspace<W> {
         blocker: TransactionBlocker,
     ) {
         if self.floating.has_window(window) {
+            let follow = self.follow_of(window);
             self.floating
-                .start_close_animation_for_window(renderer, window, blocker);
+                .start_close_animation_for_window(renderer, window, blocker, follow);
         } else {
             self.scrolling
                 .start_close_animation_for_window(renderer, window, blocker);
@@ -1793,19 +1921,62 @@ impl<W: LayoutElement> Workspace<W> {
         self.scrolling.start_open_animation(id) || self.floating.start_open_animation(id)
     }
 
-    pub fn window_under(&self, pos: Point<f64, Logical>) -> Option<(&W, HitType)> {
+    /// The window under `pos` in the view, among those drawn when the output shows `shown`, a
+    /// rectangle of the view (see [`Self::render_scrolling`]).
+    pub fn window_under(
+        &self,
+        pos: Point<f64, Logical>,
+        shown: Rectangle<f64, Logical>,
+    ) -> Option<(&W, HitType)> {
         // This logic is consistent with tiles_with_render_positions().
         if self.is_floating_visible() {
             if let Some(rv) = self
                 .floating
                 .tiles_with_render_positions()
-                .find_map(|(tile, tile_pos)| HitType::hit_tile(tile, tile_pos, pos))
+                .find_map(|(tile, tile_pos)| self.hit_floating(tile, tile_pos, pos))
             {
                 return Some(rv);
             }
         }
 
-        self.scrolling.window_under(pos)
+        #[cfg(feature = "canvas")]
+        {
+            self.scrolling.window_under(pos, shown)
+        }
+        #[cfg(not(feature = "canvas"))]
+        {
+            let _ = shown;
+            self.scrolling.window_under(pos)
+        }
+    }
+
+    /// The hit of the view's `pos` on floating `tile`, at `tile_pos` in the floating space.
+    fn hit_floating<'a>(
+        &self,
+        tile: &'a Tile<W>,
+        tile_pos: Point<f64, Logical>,
+        pos: Point<f64, Logical>,
+    ) -> Option<(&'a W, HitType)> {
+        match self.follow_of(tile.window().id()) {
+            // Under a scale a hit only activates, as on a zoomed canvas, and with
+            // `magnified-input` a scale that magnifies passes it on, mapped through the scale.
+            Some(f) if f.is_scaled() => {
+                let canvas_pos = f.from_view(pos);
+                HitType::hit_tile(tile, tile_pos, canvas_pos).map(|(win, hit)| {
+                    #[cfg(feature = "canvas")]
+                    let magnified_input = self.options.layout.canvas.magnified_input;
+                    #[cfg(not(feature = "canvas"))]
+                    let magnified_input = false;
+                    if f.scale > 1. && magnified_input {
+                        (win, hit.through_magnifier(pos, canvas_pos))
+                    } else {
+                        (win, hit.to_activate())
+                    }
+                })
+            }
+            Some(f) => HitType::hit_tile(tile, f.to_view(tile_pos), pos),
+            None => HitType::hit_tile(tile, tile_pos, pos),
+        }
     }
 
     pub fn resize_edges_under(&self, pos: Point<f64, Logical>) -> Option<ResizeEdge> {
@@ -1817,7 +1988,7 @@ impl<W: LayoutElement> Workspace<W> {
                     return None;
                 }
 
-                let pos_within_tile = pos - tile_pos;
+                let pos_within_tile = self.view_to_tile_frame(tile.window().id(), pos) - tile_pos;
 
                 if tile.hit(pos_within_tile).is_some() {
                     let size = tile.tile_size().to_f64();
@@ -1851,6 +2022,8 @@ impl<W: LayoutElement> Workspace<W> {
     }
 
     pub fn refresh(&mut self, is_active: bool, is_focused: bool) {
+        #[cfg(feature = "canvas")]
+        self.sync_follow();
         self.scrolling
             .refresh(is_active && !self.floating_is_active.get(), is_focused);
         self.floating
@@ -1906,6 +2079,12 @@ impl<W: LayoutElement> Workspace<W> {
         position: InsertPosition,
     ) -> Option<Rectangle<f64, Logical>> {
         self.scrolling.insert_hint_area(position)
+    }
+
+    #[cfg(feature = "canvas")]
+    pub fn canvas_mut(&mut self, tiled_only: bool) -> Option<&mut ScrollingSpace<W>> {
+        let tiled = self.floating_is_active != FloatingActive::Yes;
+        (tiled || !tiled_only).then_some(&mut self.scrolling)
     }
 
     pub fn view_offset_gesture_begin(&mut self, is_touchpad: bool) {

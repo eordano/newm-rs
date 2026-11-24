@@ -77,7 +77,7 @@ impl TabIndicator {
         area: Rectangle<f64, Logical>,
         count: usize,
         scale: f64,
-    ) -> impl Iterator<Item = Rectangle<f64, Logical>> {
+    ) -> impl Iterator<Item = Rectangle<f64, Logical>> + use<> {
         let round = |logical: f64| round_logical_in_physical(scale, logical);
         let round_max1 = |logical: f64| round_logical_in_physical_max1(scale, logical);
 

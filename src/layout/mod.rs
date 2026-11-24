@@ -36,13 +36,17 @@ use std::mem;
 use std::rc::Rc;
 use std::time::Duration;
 
+#[cfg(feature = "canvas")]
+use canvas::Column;
 use monitor::{InsertHint, InsertPosition, InsertWorkspace, MonitorAddWindowTarget};
 use niri_config::utils::MergeWith as _;
 use niri_config::{
     Config, CornerRadius, LayoutPart, PresetSize, Workspace as WorkspaceConfig, WorkspaceReference,
 };
 use niri_ipc::{ColumnDisplay, PositionChange, SizeChange, WindowLayout};
-use scrolling::{Column, ColumnWidth};
+#[cfg(not(feature = "canvas"))]
+use scrolling::Column;
+use scrolling::ColumnWidth;
 use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
 use smithay::backend::renderer::element::utils::RescaleRenderElement;
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
@@ -75,12 +79,15 @@ use crate::utils::{
 };
 use crate::window::ResolvedWindowRules;
 
+#[cfg(feature = "canvas")]
+pub mod canvas;
 pub mod closing_window;
 pub mod floating;
 pub mod focus_ring;
 pub mod insert_hint_element;
 pub mod monitor;
 pub mod opening_window;
+#[cfg_attr(feature = "canvas", allow(dead_code))]
 pub mod scrolling;
 pub mod shadow;
 pub mod tab_indicator;
@@ -94,7 +101,13 @@ mod tests;
 pub const RESIZE_ANIMATION_THRESHOLD: f64 = 10.;
 
 /// Pointer needs to move this far to pull a window from the layout.
+#[cfg(not(feature = "canvas"))]
 const INTERACTIVE_MOVE_START_THRESHOLD: f64 = 256. * 256.;
+
+/// Pointer needs to move this far to pull a window from the canvas, which it follows 1:1 until
+/// then: a drag of one small tile must move it, and jitter in a Super+click must not.
+#[cfg(feature = "canvas")]
+const CANVAS_MOVE_START_THRESHOLD: f64 = 8. * 8.;
 
 /// Opacity of interactively moved tiles targeting the scrolling layout.
 const INTERACTIVE_MOVE_ALPHA: f64 = 0.75;
@@ -337,6 +350,27 @@ pub trait LayoutElement {
     fn interactive_resize_data(&self) -> Option<InteractiveResizeData>;
 
     fn on_commit(&mut self, serial: Serial);
+
+    #[cfg(feature = "canvas")]
+    fn app_id(&self) -> Option<String> {
+        None
+    }
+
+    #[cfg(feature = "canvas")]
+    fn title(&self) -> Option<String> {
+        None
+    }
+
+    /// The host a terminal window is connected to with ssh, when that is known.
+    #[cfg(feature = "canvas")]
+    fn remote_host(&self) -> Option<String> {
+        None
+    }
+
+    /// Whether the window's current size is its answer to the last size requested from it: no
+    /// size change waits to be sent, acked or committed.
+    #[cfg(feature = "canvas")]
+    fn is_size_settled(&self) -> bool;
 }
 
 #[derive(Debug)]
@@ -404,6 +438,10 @@ pub struct Options {
     pub disable_resize_throttling: bool,
     pub disable_transactions: bool,
     pub deactivate_unfocused_windows: bool,
+    /// How floating windows follow the canvas camera: the config's `floating-follow`, or what an
+    /// action chose since the config last changed it.
+    #[cfg(feature = "canvas")]
+    pub floating_follow: niri_ipc::FloatingFollow,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -651,6 +689,19 @@ impl HitType {
             .map(|hit| (tile.window(), hit.offset_win_pos(tile_pos)))
     }
 
+    /// The hit seen through a camera that magnifies, for `magnified-input`: `win_pos` moves so
+    /// that `view - win_pos`, the window-local point the pointer code sends, is
+    /// `canvas - win_pos`, the point under the pointer in the window's own pixels. A click then
+    /// lands where the window is drawn.
+    pub fn through_magnifier(self, view: Point<f64, Logical>, canvas: Point<f64, Logical>) -> Self {
+        match self {
+            HitType::Input { win_pos } => HitType::Input {
+                win_pos: view - (canvas - win_pos),
+            },
+            HitType::Activate { .. } => self,
+        }
+    }
+
     pub fn to_activate(self) -> Self {
         match self {
             HitType::Input { .. } => HitType::Activate {
@@ -672,12 +723,35 @@ impl Options {
             disable_resize_throttling: config.debug.disable_resize_throttling,
             disable_transactions: config.debug.disable_transactions,
             deactivate_unfocused_windows: config.debug.deactivate_unfocused_windows,
+            #[cfg(feature = "canvas")]
+            floating_follow: config.layout.canvas.floating_follow,
         }
+        .fit_one_workspace()
     }
 
     fn with_merged_layout(mut self, part: Option<&niri_config::LayoutPart>) -> Self {
         if let Some(part) = part {
             self.layout.merge_with(part);
+        }
+        self.fit_one_workspace()
+    }
+
+    /// Whether every output keeps exactly one workspace: `canvas { one-workspace }`.
+    #[cfg(feature = "canvas")]
+    pub fn one_workspace(&self) -> bool {
+        self.layout.canvas.one_workspace
+    }
+
+    /// Whether every output keeps exactly one workspace: only the canvas can ask for it.
+    #[cfg(not(feature = "canvas"))]
+    pub fn one_workspace(&self) -> bool {
+        false
+    }
+
+    /// One workspace leaves no room for an empty workspace above the first.
+    fn fit_one_workspace(mut self) -> Self {
+        if self.one_workspace() {
+            self.layout.empty_workspace_above_first = false;
         }
         self
     }
@@ -728,15 +802,20 @@ impl<W: LayoutElement> Layout<W> {
             update_render_elements_time: Duration::ZERO,
             overview_open: false,
             overview_progress: None,
-            options: Rc::new(options),
+            options: Rc::new(options.fit_one_workspace()),
         }
     }
 
     fn with_options_and_workspaces(clock: Clock, config: &Config, options: Options) -> Self {
         let opts = Rc::new(options);
 
-        let workspaces = config
-            .workspaces
+        // With one workspace per output, the config's named workspaces are ignored.
+        let named = if opts.one_workspace() {
+            &[][..]
+        } else {
+            &config.workspaces[..]
+        };
+        let workspaces = named
             .iter()
             .map(|ws| {
                 Workspace::new_with_config_no_outputs(Some(ws.clone()), clock.clone(), opts.clone())
@@ -767,6 +846,11 @@ impl<W: LayoutElement> Layout<W> {
                 let new_output_idx = monitors.len();
                 let mut workspaces = vec![];
                 for source_idx in 0..monitors.len() {
+                    // A monitor with one workspace keeps it, windows and all.
+                    if monitors[source_idx].options.one_workspace() {
+                        continue;
+                    }
+
                     let mut stopped_ws_switch = false;
 
                     for i in (0..monitors[source_idx].workspaces.len()).rev() {
@@ -983,6 +1067,15 @@ impl<W: LayoutElement> Layout<W> {
         let scrolling_height = height.map(SizeChange::from);
         let id = window.id().clone();
 
+        #[cfg(feature = "canvas")]
+        let target = match target {
+            AddWindowTarget::Auto if !is_floating => window
+                .app_id()
+                .and_then(|app_id| self.placeholder_workspace(&app_id))
+                .map_or(AddWindowTarget::Auto, AddWindowTarget::Workspace),
+            target => target,
+        };
+
         match &mut self.monitor_set {
             MonitorSet::Normal {
                 monitors,
@@ -1011,7 +1104,7 @@ impl<W: LayoutElement> Layout<W> {
                         )
                     }
                     AddWindowTarget::NextTo(next_to) => {
-                        if let Some(output) = self
+                        match self
                             .interactive_move
                             .as_ref()
                             .and_then(|move_| {
@@ -1024,21 +1117,24 @@ impl<W: LayoutElement> Layout<W> {
                             .filter(|move_| next_to == move_.tile.window().id())
                             .map(|move_| move_.output.clone())
                         {
-                            // The next_to window is being interactively moved.
-                            let mon_idx = monitors
-                                .iter()
-                                .position(|mon| mon.output == output)
-                                .unwrap_or(*active_monitor_idx);
+                            Some(output) => {
+                                // The next_to window is being interactively moved.
+                                let mon_idx = monitors
+                                    .iter()
+                                    .position(|mon| mon.output == output)
+                                    .unwrap_or(*active_monitor_idx);
 
-                            (mon_idx, MonitorAddWindowTarget::Auto)
-                        } else {
-                            let mon_idx = monitors
-                                .iter()
-                                .position(|mon| {
-                                    mon.workspaces.iter().any(|ws| ws.has_window(next_to))
-                                })
-                                .unwrap();
-                            (mon_idx, MonitorAddWindowTarget::NextTo(next_to))
+                                (mon_idx, MonitorAddWindowTarget::Auto)
+                            }
+                            _ => {
+                                let mon_idx = monitors
+                                    .iter()
+                                    .position(|mon| {
+                                        mon.workspaces.iter().any(|ws| ws.has_window(next_to))
+                                    })
+                                    .unwrap();
+                                (mon_idx, MonitorAddWindowTarget::NextTo(next_to))
+                            }
                         }
                     }
                 };
@@ -1061,8 +1157,8 @@ impl<W: LayoutElement> Layout<W> {
                     *active_monitor_idx = mon_idx;
                 }
 
-                // Set the default height for scrolling windows.
-                if !is_floating {
+                // Set the default height for scrolling windows; the canvas opens them at it.
+                if !is_floating && !cfg!(feature = "canvas") {
                     if let Some(change) = scrolling_height {
                         let ws = mon
                             .workspaces
@@ -1140,8 +1236,8 @@ impl<W: LayoutElement> Layout<W> {
                     None,
                 );
 
-                // Set the default height for scrolling windows.
-                if !is_floating {
+                // Set the default height for scrolling windows; the canvas opens them at it.
+                if !is_floating && !cfg!(feature = "canvas") {
                     if let Some(change) = scrolling_height {
                         ws.set_window_height(Some(&id), change);
                     }
@@ -1294,7 +1390,7 @@ impl<W: LayoutElement> Layout<W> {
 
     pub fn find_workspace_by_id(&self, id: WorkspaceId) -> Option<(usize, &Workspace<W>)> {
         match &self.monitor_set {
-            MonitorSet::Normal { ref monitors, .. } => {
+            MonitorSet::Normal { monitors, .. } => {
                 for mon in monitors {
                     if let Some(index) = mon.idx_of_ws(id) {
                         let workspace = &mon.workspaces[index];
@@ -1316,7 +1412,7 @@ impl<W: LayoutElement> Layout<W> {
 
     pub fn find_workspace_by_name(&self, workspace_name: &str) -> Option<(usize, &Workspace<W>)> {
         match &self.monitor_set {
-            MonitorSet::Normal { ref monitors, .. } => {
+            MonitorSet::Normal { monitors, .. } => {
                 for mon in monitors {
                     if let Some((index, workspace)) =
                         mon.workspaces.iter().enumerate().find(|(_, w)| {
@@ -1678,7 +1774,10 @@ impl<W: LayoutElement> Layout<W> {
         Some(&mut mon.workspaces[mon.active_workspace_idx])
     }
 
-    pub fn windows_for_output(&self, output: &Output) -> impl Iterator<Item = &W> + '_ {
+    pub fn windows_for_output(
+        &self,
+        output: &Output,
+    ) -> impl Iterator<Item = &W> + '_ + use<'_, W> {
         let MonitorSet::Normal { monitors, .. } = &self.monitor_set else {
             panic!()
         };
@@ -1697,7 +1796,10 @@ impl<W: LayoutElement> Layout<W> {
         moving_window.chain(mon_windows)
     }
 
-    pub fn windows_for_output_mut(&mut self, output: &Output) -> impl Iterator<Item = &mut W> + '_ {
+    pub fn windows_for_output_mut(
+        &mut self,
+        output: &Output,
+    ) -> impl Iterator<Item = &mut W> + '_ + use<'_, W> {
         let MonitorSet::Normal { monitors, .. } = &mut self.monitor_set else {
             panic!()
         };
@@ -2947,7 +3049,8 @@ impl<W: LayoutElement> Layout<W> {
     }
 
     pub fn ensure_named_workspace(&mut self, ws_config: &WorkspaceConfig) {
-        if self.find_workspace_by_name(&ws_config.name.0).is_some() {
+        if self.options.one_workspace() || self.find_workspace_by_name(&ws_config.name.0).is_some()
+        {
             return;
         }
 
@@ -3000,11 +3103,24 @@ impl<W: LayoutElement> Layout<W> {
             }
         }
 
-        self.update_options(Options::from_config(config));
+        let options = Options::from_config(config);
+        // What an action chose holds until the config changes the setting.
+        #[cfg(feature = "canvas")]
+        let options = if options.layout.canvas.floating_follow
+            == self.options.layout.canvas.floating_follow
+        {
+            Options {
+                floating_follow: self.options.floating_follow,
+                ..options
+            }
+        } else {
+            options
+        };
+        self.update_options(options);
     }
 
     fn update_options(&mut self, options: Options) {
-        let options = Rc::new(options);
+        let options = Rc::new(options.fit_one_workspace());
 
         if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
             let view_size = output_size(&move_.output);
@@ -3023,13 +3139,34 @@ impl<W: LayoutElement> Layout<W> {
                 }
             }
             MonitorSet::NoOutputs { workspaces } => {
-                for ws in workspaces {
+                for ws in workspaces.iter_mut() {
                     ws.update_config(options.clone());
+                }
+                // Names mean nothing with one workspace; the first output to come gathers the
+                // windows of the rest.
+                if options.one_workspace() {
+                    for ws in workspaces.iter_mut() {
+                        ws.unname();
+                    }
+                    workspaces.retain(|ws| ws.has_windows());
                 }
             }
         }
 
         self.options = options;
+    }
+
+    /// Whether the active output keeps exactly one workspace (`canvas { one-workspace }`); with
+    /// no outputs, whether the layout does.
+    pub fn one_workspace(&self) -> bool {
+        match &self.monitor_set {
+            MonitorSet::Normal {
+                monitors,
+                active_monitor_idx,
+                ..
+            } => monitors[*active_monitor_idx].options.one_workspace(),
+            MonitorSet::NoOutputs { .. } => self.options.one_workspace(),
+        }
     }
 
     pub fn toggle_width(&mut self, forwards: bool) {
@@ -3507,6 +3644,13 @@ impl<W: LayoutElement> Layout<W> {
             .position(|mon| mon.output == *new_output)
             .unwrap();
 
+        // Moving an output's one workspace away would leave it with none.
+        if monitors[current_idx].options.one_workspace()
+            || monitors[target_idx].options.one_workspace()
+        {
+            return false;
+        }
+
         let current = &mut monitors[current_idx];
 
         if current.workspaces.len() <= old_idx {
@@ -3886,17 +4030,14 @@ impl<W: LayoutElement> Layout<W> {
         let zoom = mon.overview_zoom();
 
         let is_floating = ws.is_floating(&window_id);
-        let (tile, tile_offset, _visible) = ws
-            .tiles_with_render_positions()
-            .find(|(tile, _, _)| tile.window().id() == &window_id)
-            .unwrap();
-        let window_offset = tile.window_loc();
+        let (tile, tile_offset, tile_scale) = ws.tile_view_geo(&window_id).unwrap();
+        let window_offset = tile.window_loc().upscale(tile_scale);
 
         let tile_pos = ws_geo.loc + tile_offset.upscale(zoom);
 
         let pointer_offset_within_window =
             start_pos_within_output - tile_pos - window_offset.upscale(zoom);
-        let window_size = tile.window_size().upscale(zoom);
+        let window_size = tile.window_size().upscale(tile_scale * zoom);
         let pointer_ratio_within_window = (
             f64::clamp(pointer_offset_within_window.x / window_size.w, 0., 1.),
             f64::clamp(pointer_offset_within_window.y / window_size.h, 0., 1.),
@@ -3956,27 +4097,35 @@ impl<W: LayoutElement> Layout<W> {
                 let (cx, cy) = (pointer_delta.x, pointer_delta.y);
                 let sq_dist = cx * cx + cy * cy;
 
-                let factor = RubberBand {
-                    stiffness: 1.0,
-                    limit: 0.5,
-                }
-                .band(sq_dist / INTERACTIVE_MOVE_START_THRESHOLD);
-
-                let (is_floating, tile, workspace_config) = self
+                let (is_floating, tile, tile_scale, workspace_config) = self
                     .workspaces_mut()
                     .find(|ws| ws.has_window(&window_id))
                     .map(|ws| {
                         let workspace_config = ws.layout_config().cloned().map(|c| (ws.id(), c));
+                        let tile_scale = ws.tile_view_geo(&window_id).map_or(1., |geo| geo.2);
                         (
                             ws.is_floating(&window_id),
                             ws.tiles_mut()
                                 .find(|tile| *tile.window().id() == window_id)
                                 .unwrap(),
+                            tile_scale,
                             workspace_config,
                         )
                     })
                     .unwrap();
-                tile.interactive_move_offset = pointer_delta.upscale(factor);
+
+                #[cfg(feature = "canvas")]
+                let (factor, threshold) = (1., CANVAS_MOVE_START_THRESHOLD);
+                #[cfg(not(feature = "canvas"))]
+                let (factor, threshold) = (
+                    RubberBand {
+                        stiffness: 1.0,
+                        limit: 0.5,
+                    }
+                    .band(sq_dist / INTERACTIVE_MOVE_START_THRESHOLD),
+                    INTERACTIVE_MOVE_START_THRESHOLD,
+                );
+                tile.interactive_move_offset = pointer_delta.upscale(factor / tile_scale);
 
                 // Put it back to be able to easily return.
                 self.interactive_move = Some(InteractiveMoveState::Starting {
@@ -3985,9 +4134,19 @@ impl<W: LayoutElement> Layout<W> {
                     pointer_ratio_within_window,
                 });
 
-                if !is_floating && sq_dist < INTERACTIVE_MOVE_START_THRESHOLD {
+                if !is_floating && sq_dist < threshold {
                     return true;
                 }
+
+                #[cfg(feature = "canvas")]
+                if !is_floating
+                    && self.canvas_keeps_move(&window_id, &output, pointer_pos_within_output)
+                {
+                    self.canvas_preview_move(&window_id);
+                    return true;
+                }
+                #[cfg(feature = "canvas")]
+                self.canvas_clear_previews();
 
                 let output_config = self
                     .monitors()
@@ -4008,10 +4167,7 @@ impl<W: LayoutElement> Layout<W> {
                         .map(|rv| (mon, rv))
                 }) {
                     if mon.output() == &output {
-                        let (_, tile_offset, _) = ws
-                            .tiles_with_render_positions()
-                            .find(|(tile, _, _)| tile.window().id() == window)
-                            .unwrap();
+                        let (_, tile_offset, _) = ws.tile_view_geo(window).unwrap();
 
                         let zoom = mon.overview_zoom();
                         tile_pos = Some((ws_geo.loc + tile_offset.upscale(zoom), zoom));
@@ -4171,7 +4327,13 @@ impl<W: LayoutElement> Layout<W> {
                 }
 
                 for ws in self.workspaces_mut() {
-                    if let Some(tile) = ws.tiles_mut().find(|tile| *tile.window().id() == window_id)
+                    #[cfg(feature = "canvas")]
+                    let dropped = ws.scrolling_mut().drop_moved(&window_id);
+                    #[cfg(not(feature = "canvas"))]
+                    let dropped = false;
+                    if !dropped
+                        && let Some(tile) =
+                            ws.tiles_mut().find(|tile| *tile.window().id() == window_id)
                     {
                         let offset = tile.interactive_move_offset;
                         tile.interactive_move_offset = Point::from((0., 0.));
@@ -4373,17 +4535,22 @@ impl<W: LayoutElement> Layout<W> {
                 }
 
                 // needed because empty_workspace_above_first could have modified the idx
-                let (tile, tile_offset, ws_geo) = mon
+                let (tile, tile_offset, tile_scale, ws_geo) = mon
                     .workspaces_with_render_geo_mut(false)
                     .find_map(|(ws, geo)| {
-                        ws.tiles_with_render_positions_mut(false)
-                            .find(|(tile, _)| tile.window().id() == &win_id)
-                            .map(|(tile, tile_offset)| (tile, tile_offset, geo))
+                        let (_, tile_offset) = ws
+                            .tiles_with_render_positions_mut(false)
+                            .find(|(tile, _)| tile.window().id() == &win_id)?;
+                        let (tile_offset, tile_scale) = ws.tile_frame_to_view(&win_id, tile_offset);
+                        let tile = ws.tiles_mut().find(|tile| tile.window().id() == &win_id)?;
+                        Some((tile, tile_offset, tile_scale, geo))
                     })
                     .unwrap();
                 let new_tile_render_loc = ws_geo.loc + tile_offset.upscale(zoom);
 
-                tile.animate_move_from((tile_render_loc - new_tile_render_loc).downscale(zoom));
+                tile.animate_move_from(
+                    (tile_render_loc - new_tile_render_loc).downscale(zoom * tile_scale),
+                );
 
                 // Interactive move into floating barely animates (it doesn't really move after
                 // being dropped), so setting it as moving between workspaces would just cause it to
@@ -4603,6 +4770,10 @@ impl<W: LayoutElement> Layout<W> {
         let Some(ws) = ws else {
             return;
         };
+        // The one workspace of an output stays unnamed.
+        if ws.base_options.one_workspace() {
+            return;
+        }
 
         ws.name.replace(name);
 

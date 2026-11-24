@@ -96,6 +96,10 @@ pub struct Tile<W: LayoutElement> {
     /// The animation of the tile's opacity.
     pub(super) alpha_animation: Option<AlphaAnimation>,
 
+    /// The span the tile held on the canvas it last left, which the next canvas opens it at.
+    #[cfg(feature = "canvas")]
+    pub(super) canvas_span: Option<(i32, i32)>,
+
     /// Offset during the initial interactive move rubberband.
     pub(super) interactive_move_offset: Point<f64, Logical>,
 
@@ -210,6 +214,8 @@ impl<W: LayoutElement> Tile<W> {
             move_x_animation: None,
             move_y_animation: None,
             alpha_animation: None,
+            #[cfg(feature = "canvas")]
+            canvas_span: None,
             interactive_move_offset: Point::from((0., 0.)),
             unmap_snapshot: None,
             rounded_corner_damage: Default::default(),
