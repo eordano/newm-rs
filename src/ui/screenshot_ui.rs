@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::collections::HashMap;
+#[cfg(feature = "text")]
 use std::f64::consts::TAU;
 use std::iter::zip;
 use std::rc::Rc;
@@ -9,7 +10,9 @@ use anyhow::Context;
 use arrayvec::ArrayVec;
 use niri_config::{Action, Bind, BoundAction, Config, Key, Modifiers, Trigger};
 use niri_ipc::SizeChange;
+#[cfg(feature = "text")]
 use pango::{Alignment, FontDescription};
+#[cfg(feature = "text")]
 use pangocairo::cairo::{self, ImageSurface};
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::input::TouchSlot;
@@ -28,12 +31,15 @@ use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
 use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
 use crate::render_helpers::{render_to_texture, RenderTarget};
+#[cfg(not(feature = "text"))]
+use crate::ui::textless::Panel;
 use crate::utils::to_physical_precise_round;
 
 const SELECTION_BORDER: i32 = 2;
 
 const PADDING: i32 = 8;
 const RADIUS: i32 = 16;
+#[cfg(feature = "text")]
 const FONT: &str = "sans 14px";
 const BORDER: i32 = 4;
 const TEXT_HIDE_P: &str =
@@ -1165,6 +1171,7 @@ fn is_within_capture_button(
     (pos.x - xc) * (pos.x - xc) + (pos.y - yc) * (pos.y - yc) <= radius * radius
 }
 
+#[cfg(feature = "text")]
 fn render_panel(
     renderer: &mut GlesRenderer,
     scale: f64,
@@ -1261,4 +1268,29 @@ fn render_panel(
     )?;
 
     Ok(buffer)
+}
+
+#[cfg(not(feature = "text"))]
+fn render_panel(
+    renderer: &mut GlesRenderer,
+    scale: f64,
+    _text: &str,
+) -> anyhow::Result<TextureBuffer<GlesTexture>> {
+    let padding: i32 = to_physical_precise_round(scale, PADDING);
+    let radius: i32 = to_physical_precise_round(scale, RADIUS);
+    let circle_stroke: f64 = to_physical_precise_round(scale, 2.);
+
+    let size = (padding + radius) * 2;
+    let center = (f64::from(padding + radius), f64::from(padding + radius));
+    let r = f64::from(radius);
+
+    let mut panel = Panel::new(size, size, [0.1, 0.1, 0.1]);
+    panel.frame(
+        to_physical_precise_round(scale, BORDER / 2),
+        [0.3, 0.3, 0.3],
+    );
+    panel.disc(center, r, [1., 1., 1.]);
+    panel.disc(center, r - circle_stroke, [0.1, 0.1, 0.1]);
+    panel.disc(center, r - circle_stroke * 2., [1., 1., 1.]);
+    panel.into_texture(renderer, scale)
 }

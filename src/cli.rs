@@ -36,7 +36,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Sub {
-    /// Communicate with the running niri instance.
+    /// Communicate with the running newm-rs instance.
     Msg {
         #[command(subcommand)]
         msg: Msg,
@@ -95,7 +95,7 @@ pub enum Msg {
     Output {
         /// Output name.
         ///
-        /// Run `niri msg outputs` to see the output names.
+        /// Run `newm-rs msg outputs` to see the output names.
         #[arg()]
         output: String,
         /// Configuration to apply.
@@ -104,9 +104,9 @@ pub enum Msg {
     },
     /// Start continuously receiving events from the compositor.
     EventStream,
-    /// Print the version of the running niri instance.
+    /// Print the version of the running newm-rs instance.
     Version,
-    /// Request an error from the running niri instance.
+    /// Request an error from the running newm-rs instance.
     RequestError,
     /// Print the overview state.
     OverviewState,

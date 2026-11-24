@@ -1,17 +1,22 @@
 use std::cell::RefCell;
+#[cfg(feature = "text")]
 use std::cmp::min;
 use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 use std::time::Duration;
 
+#[cfg(feature = "text")]
 use anyhow::ensure;
 use niri_config::{
     Action, Bind, BoundAction, Color, Config, CornerRadius, GradientInterpolation, Key, Modifiers,
     MruDirection, MruFilter, MruScope, Trigger,
 };
+#[cfg(feature = "text")]
 use pango::FontDescription;
+#[cfg(feature = "text")]
 use pangocairo::cairo::{self, ImageSurface};
+#[cfg(feature = "text")]
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::element::utils::{
     Relocate, RelocateRenderElement, RescaleRenderElement,
@@ -21,7 +26,9 @@ use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::backend::renderer::Color32F;
 use smithay::input::keyboard::Keysym;
 use smithay::output::Output;
-use smithay::utils::{Logical, Point, Rectangle, Scale, Size, Transform};
+#[cfg(feature = "text")]
+use smithay::utils::Transform;
+use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
 
 use crate::animation::{Animation, Clock};
 use crate::layout::focus_ring::{FocusRing, FocusRingRenderElement};
@@ -37,9 +44,10 @@ use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
 use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
 use crate::render_helpers::RenderCtx;
+#[cfg(feature = "text")]
+use crate::utils::to_physical_precise_round;
 use crate::utils::{
-    baba_is_float_offset, output_size, round_logical_in_physical, to_physical_precise_round,
-    with_toplevel_role,
+    baba_is_float_offset, output_size, round_logical_in_physical, with_toplevel_role,
 };
 use crate::window::mapped::MappedId;
 use crate::window::Mapped;
@@ -66,12 +74,14 @@ const STRUT: f64 = 192.;
 const PANEL_PADDING: i32 = 12;
 
 /// Border size of the scope indication panel.
+#[cfg(feature = "text")]
 const PANEL_BORDER: i32 = 4;
 
 /// Backdrop color behind the previews.
 const BACKDROP_COLOR: Color32F = Color32F::new(0., 0., 0., 0.8);
 
 /// Font used to render the window titles.
+#[cfg(feature = "text")]
 const FONT: &str = "sans 14px";
 
 /// Scopes in the order they are cycled through.
@@ -492,12 +502,15 @@ impl Thumbnail {
             );
 
             let ctx = ctx.as_gles();
-            if let Some(program) = GradientFadeTextureRenderElement::shader(ctx.renderer) {
-                let elem = GradientFadeTextureRenderElement::new(texture, program);
-                push(WindowMruUiRenderElement::GradientFadeElem(elem));
-            } else {
-                let elem = PrimaryGpuTextureRenderElement(texture);
-                push(WindowMruUiRenderElement::TextureElement(elem));
+            match GradientFadeTextureRenderElement::shader(ctx.renderer) {
+                Some(program) => {
+                    let elem = GradientFadeTextureRenderElement::new(texture, program);
+                    push(WindowMruUiRenderElement::GradientFadeElem(elem));
+                }
+                _ => {
+                    let elem = PrimaryGpuTextureRenderElement(texture);
+                    push(WindowMruUiRenderElement::TextureElement(elem));
+                }
             }
         }
 
@@ -597,6 +610,11 @@ impl WindowMru {
             }
         }
 
+        Self::from_thumbnails(thumbnails)
+    }
+
+    /// One entry per window, the most recently focused first, whatever its app.
+    fn from_thumbnails(mut thumbnails: Vec<Thumbnail>) -> Self {
         thumbnails
             .sort_by(|Thumbnail { timestamp: t1, .. }, Thumbnail { timestamp: t2, .. }| t2.cmp(t1));
 
@@ -1656,6 +1674,7 @@ impl TitleTexture {
     }
 }
 
+#[cfg(feature = "text")]
 fn generate_title_texture(
     renderer: &mut GlesRenderer,
     title: &str,
@@ -1702,6 +1721,15 @@ fn generate_title_texture(
     )?;
 
     Ok(buffer)
+}
+
+#[cfg(not(feature = "text"))]
+fn generate_title_texture(
+    _renderer: &mut GlesRenderer,
+    _title: &str,
+    _scale: f64,
+) -> anyhow::Result<MruTexture> {
+    anyhow::bail!("built without text rendering")
 }
 
 impl ScopePanel {
@@ -1764,6 +1792,7 @@ fn generate_scope_panels(
     ])
 }
 
+#[cfg(feature = "text")]
 fn render_panel(renderer: &mut GlesRenderer, scale: f64, text: &str) -> anyhow::Result<MruTexture> {
     let _span = tracy_client::span!("mru::render_panel");
 
@@ -1824,6 +1853,15 @@ fn render_panel(renderer: &mut GlesRenderer, scale: f64, text: &str) -> anyhow::
     )?;
 
     Ok(buffer)
+}
+
+#[cfg(not(feature = "text"))]
+fn render_panel(
+    _renderer: &mut GlesRenderer,
+    _scale: f64,
+    _text: &str,
+) -> anyhow::Result<MruTexture> {
+    anyhow::bail!("built without text rendering")
 }
 
 /// Returns key bindings available when the MRU UI is open.

@@ -7,7 +7,7 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use std::sync::atomic::AtomicBool;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{f64, fmt};
 
 use anyhow::{ensure, Context};
@@ -157,6 +157,39 @@ pub fn version() -> String {
         format!("{MAJOR}.{MINOR:0>2} ({commit})")
     } else {
         format!("{MAJOR}.{MINOR:0>2}.{PATCH} ({commit})")
+    }
+}
+
+/// Main-loop work this long or longer names itself in the debug log, so a stall the user feels
+/// (input lagging behind, a dropped frame) says what took the time.
+pub const SLOW_WORK: Duration = Duration::from_millis(8);
+
+/// Logs `what` at debug level when it took [`SLOW_WORK`] or longer since `start`.
+pub fn log_slow(what: &str, start: Instant) {
+    let took = start.elapsed();
+    if took >= SLOW_WORK {
+        debug!("slow main-loop work: {what} took {} ms", took.as_millis());
+    }
+}
+
+/// Logs its work at debug level when dropped [`SLOW_WORK`] or more after it was made.
+pub struct SlowGuard {
+    what: &'static str,
+    start: Instant,
+}
+
+impl SlowGuard {
+    pub fn new(what: &'static str) -> Self {
+        Self {
+            what,
+            start: Instant::now(),
+        }
+    }
+}
+
+impl Drop for SlowGuard {
+    fn drop(&mut self) {
+        log_slow(self.what, self.start);
     }
 }
 
@@ -549,9 +582,11 @@ pub fn baba_is_float_offset(now: Duration, view_height: f64) -> f64 {
 }
 
 #[cfg(feature = "dbus")]
+#[cfg_attr(not(feature = "text"), allow(clippy::option_as_ref_deref))]
 pub fn show_screenshot_notification(image_path: Option<&Path>) -> anyhow::Result<()> {
     use std::collections::HashMap;
 
+    #[cfg(feature = "text")]
     use pango::glib;
     use zbus::zvariant;
 
@@ -598,6 +633,27 @@ pub fn show_screenshot_notification(image_path: Option<&Path>) -> anyhow::Result
     )?;
 
     Ok(())
+}
+
+#[cfg(all(feature = "dbus", not(feature = "text")))]
+mod glib {
+    use std::os::unix::ffi::OsStrExt as _;
+    use std::path::Path;
+
+    pub fn filename_to_uri(
+        path: impl AsRef<Path>,
+        _hostname: Option<&str>,
+    ) -> anyhow::Result<String> {
+        let mut uri = String::from("file://");
+        for &byte in path.as_ref().as_os_str().as_bytes() {
+            if byte.is_ascii_alphanumeric() || b"/-._~".contains(&byte) {
+                uri.push(char::from(byte));
+            } else {
+                uri.push_str(&format!("%{byte:02X}"));
+            }
+        }
+        Ok(uri)
+    }
 }
 
 #[inline(never)]

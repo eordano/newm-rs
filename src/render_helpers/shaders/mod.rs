@@ -21,6 +21,8 @@ pub struct Shaders {
     pub custom_resize: RefCell<Option<ShaderProgram>>,
     pub custom_close: RefCell<Option<ShaderProgram>>,
     pub custom_open: RefCell<Option<ShaderProgram>>,
+    /// The synth background's program, compiled the first time the background is drawn.
+    pub synth: RefCell<Option<ShaderProgram>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -30,6 +32,7 @@ pub enum ProgramType {
     Resize,
     Close,
     Open,
+    Synth,
 }
 
 impl Shaders {
@@ -159,6 +162,7 @@ impl Shaders {
             custom_resize: RefCell::new(None),
             custom_close: RefCell::new(None),
             custom_open: RefCell::new(None),
+            synth: RefCell::new(None),
         }
     }
 
@@ -207,6 +211,7 @@ impl Shaders {
                 .or_else(|| self.resize.clone()),
             ProgramType::Close => self.custom_close.borrow().clone(),
             ProgramType::Open => self.custom_open.borrow().clone(),
+            ProgramType::Synth => self.synth.borrow().clone(),
         }
     }
 }

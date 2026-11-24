@@ -204,8 +204,15 @@ pub fn setup(state: &mut State, config_path: &ConfigPath, includes: Vec<PathBuf>
             |event: calloop::channel::Event<Result<Config, ()>>, _, state| match event {
                 calloop::channel::Event::Msg(config) => {
                     let failed = config.is_err();
+                    // Live overrides stay on top of every config file load.
+                    #[cfg(feature = "canvas")]
+                    let config = config.map(|config| state.niri.live_options.loaded(config));
                     state.reload_config(config);
                     state.ipc_config_loaded(failed);
+                    #[cfg(feature = "canvas")]
+                    if !failed {
+                        state.ipc_newm_options_changed();
+                    }
                 }
                 calloop::channel::Event::Closed => (),
             },

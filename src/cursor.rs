@@ -188,8 +188,8 @@ impl CursorManager {
 
     /// Set the common XCURSOR env variables.
     fn ensure_env(theme: &str, size: u8) {
-        env::set_var("XCURSOR_THEME", theme);
-        env::set_var("XCURSOR_SIZE", size.to_string());
+        unsafe { env::set_var("XCURSOR_THEME", theme) };
+        unsafe { env::set_var("XCURSOR_SIZE", size.to_string()) };
     }
 
     fn fallback_cursor() -> XCursor {

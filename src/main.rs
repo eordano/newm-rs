@@ -15,23 +15,23 @@ use clap::{CommandFactory, Parser};
 use clap_complete::Shell;
 use clap_complete_nushell::Nushell;
 use directories::ProjectDirs;
-use niri::cli::{Cli, CompletionShell, Sub};
+use newm_rs::cli::{Cli, CompletionShell, Sub};
 #[cfg(feature = "dbus")]
-use niri::dbus;
-use niri::ipc::client::handle_msg;
-use niri::niri::State;
-use niri::utils::spawning::{
+use newm_rs::dbus;
+use newm_rs::ipc::client::handle_msg;
+use newm_rs::niri::State;
+use newm_rs::utils::spawning::{
     spawn, spawn_sh, store_and_increase_nofile_rlimit, CHILD_DISPLAY, CHILD_ENV,
     REMOVE_ENV_RUST_BACKTRACE, REMOVE_ENV_RUST_LIB_BACKTRACE,
 };
-use niri::utils::{cause_panic, version, watcher, xwayland, IS_SYSTEMD_SERVICE};
+use newm_rs::utils::{cause_panic, version, watcher, xwayland, IS_SYSTEMD_SERVICE};
 use niri_config::{Config, ConfigPath};
 use niri_ipc::socket::SOCKET_PATH_ENV;
 use sd_notify::NotifyState;
 use smithay::reexports::wayland_server::Display;
 use tracing_subscriber::EnvFilter;
 
-const DEFAULT_LOG_FILTER: &str = "niri=debug,smithay::backend::renderer::gles=error";
+const DEFAULT_LOG_FILTER: &str = "newm_rs=debug,smithay::backend::renderer::gles=error";
 
 #[cfg(feature = "profile-with-tracy-allocations")]
 #[global_allocator]
@@ -41,11 +41,13 @@ static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set backtrace defaults if not set.
     if env::var_os("RUST_BACKTRACE").is_none() {
-        env::set_var("RUST_BACKTRACE", "1");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("RUST_BACKTRACE", "1") };
         REMOVE_ENV_RUST_BACKTRACE.store(true, Ordering::Relaxed);
     }
     if env::var_os("RUST_LIB_BACKTRACE").is_none() {
-        env::set_var("RUST_LIB_BACKTRACE", "0");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("RUST_LIB_BACKTRACE", "0") };
         REMOVE_ENV_RUST_LIB_BACKTRACE.store(true, Ordering::Relaxed);
     }
 
@@ -78,22 +80,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if env::var_os("WSL_DISTRO_NAME").is_none() {
             if env::var_os("DISPLAY").is_some() {
                 warn!("running as a session but DISPLAY is set, removing it");
-                env::remove_var("DISPLAY");
+                // FIXME: Audit that the environment access only happens in single-threaded code.
+                unsafe { env::remove_var("DISPLAY") };
             }
             if env::var_os("WAYLAND_DISPLAY").is_some() {
                 warn!("running as a session but WAYLAND_DISPLAY is set, removing it");
-                env::remove_var("WAYLAND_DISPLAY");
+                // FIXME: Audit that the environment access only happens in single-threaded code.
+                unsafe { env::remove_var("WAYLAND_DISPLAY") };
             }
             if env::var_os("WAYLAND_SOCKET").is_some() {
                 warn!("running as a session but WAYLAND_SOCKET is set, removing it");
-                env::remove_var("WAYLAND_SOCKET");
+                // FIXME: Audit that the environment access only happens in single-threaded code.
+                unsafe { env::remove_var("WAYLAND_SOCKET") };
             }
         }
 
         // Set the current desktop for xdg-desktop-portal.
-        env::set_var("XDG_CURRENT_DESKTOP", "niri");
+        let desktop = session_desktop(env::var("XDG_CURRENT_DESKTOP").ok().as_deref());
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("XDG_CURRENT_DESKTOP", desktop) };
         // Ensure the session type is set to Wayland for xdg-autostart and Qt apps.
-        env::set_var("XDG_SESSION_TYPE", "wayland");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("XDG_SESSION_TYPE", "wayland") };
     }
 
     // Handle subcommands.
@@ -141,7 +149,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Needs to be done before starting Tracy, so that it applies to Tracy's threads.
-    niri::utils::signals::block_early().unwrap();
+    newm_rs::utils::signals::block_early().unwrap();
 
     // Avoid starting Tracy for the `niri msg` code path since starting/stopping Tracy is a bit
     // slow.
@@ -156,7 +164,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load the config.
     let config_path = config_path(cli.config);
-    env::remove_var("NIRI_CONFIG");
+    // FIXME: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::remove_var("NIRI_CONFIG") };
     let (config_created_at, config_load_result) = config_path.load_or_create();
     let config_errored = config_load_result.config.is_err();
     let mut config = config_load_result.config.unwrap_or_else(|err| {
@@ -165,6 +174,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let config_includes = config_load_result.includes;
 
+    // The live settings keep the config file as loaded, environment included.
+    #[cfg(feature = "canvas")]
+    let live_file = config.clone();
     let spawn_at_startup = mem::take(&mut config.spawn_at_startup);
     let spawn_sh_at_startup = mem::take(&mut config.spawn_sh_at_startup);
     *CHILD_ENV.write().unwrap() = mem::take(&mut config.environment);
@@ -175,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut event_loop = EventLoop::<State>::try_new().unwrap();
 
     // Handle Ctrl+C and other signals.
-    niri::utils::signals::listen(&event_loop.handle());
+    newm_rs::utils::signals::listen(&event_loop.handle());
 
     // Create the compositor.
     let display = Display::new().unwrap();
@@ -196,7 +208,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set WAYLAND_DISPLAY for children.
     let socket_name = state.niri.socket_name.as_deref().unwrap();
-    env::set_var("WAYLAND_DISPLAY", socket_name);
+    // FIXME: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::set_var("WAYLAND_DISPLAY", socket_name) };
     info!(
         "listening on Wayland socket: {}",
         socket_name.to_string_lossy()
@@ -205,7 +218,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set NIRI_SOCKET for children.
     if let Some(ipc) = &state.niri.ipc_server {
         let socket_path = ipc.socket_path.as_deref().unwrap();
-        env::set_var(SOCKET_PATH_ENV, socket_path);
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var(SOCKET_PATH_ENV, socket_path) };
         info!("IPC listening on: {}", socket_path.to_string_lossy());
     }
 
@@ -214,11 +228,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(satellite) = &state.niri.satellite {
         let name = satellite.display_name();
         *CHILD_DISPLAY.write().unwrap() = Some(name.to_owned());
-        env::set_var("DISPLAY", name);
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("DISPLAY", name) };
         info!("listening on X11 socket: {name}");
     } else {
         // Avoid spawning children in the host X11.
-        env::remove_var("DISPLAY");
+        // FIXME: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("DISPLAY") };
     }
 
     if cli.session {
@@ -256,6 +272,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     watcher::setup(&mut state, &config_path, config_includes);
 
+    #[cfg(feature = "canvas")]
+    {
+        newm_kde::apps::enable();
+        state.niri.live_options = niri_config::live::LiveOptions::new(live_file, &[]);
+        state.ipc_newm_options_changed();
+    }
+
+    #[cfg(feature = "canvas")]
+    let startup = newm_rs::session::startup_programs(&spawn_at_startup, &spawn_sh_at_startup);
+
     // Spawn commands from cli and auto-start.
     spawn(cli.command, None);
 
@@ -265,6 +291,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for elem in spawn_sh_at_startup {
         spawn_sh(elem.command, None);
     }
+
+    #[cfg(feature = "canvas")]
+    newm_rs::session::start(&mut state, startup);
 
     // Show the config error notification right away if needed.
     if config_errored {
@@ -280,6 +309,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     Ok(())
+}
+
+/// The `XDG_CURRENT_DESKTOP` of a session: `niri`, with the desktops the session file lists after
+/// it kept (`DesktopNames=niri;KDE` arrives as `niri:KDE`).
+///
+/// xdg-desktop-portal goes by the first name. Chromium and Qt look for `KDE` anywhere in the
+/// list to pick KWallet and the KDE platform theme, and a service started with the session reads
+/// the value imported at startup, before any startup command could correct it.
+fn session_desktop(current: Option<&str>) -> String {
+    match current {
+        Some(current) if current.split(':').next() == Some("niri") => current.to_owned(),
+        _ => String::from("niri"),
+    }
 }
 
 fn import_environment() {
@@ -378,7 +420,8 @@ fn notify_fd() -> anyhow::Result<()> {
         Err(env::VarError::NotPresent) => return Ok(()),
         Err(err) => return Err(err.into()),
     };
-    env::remove_var("NOTIFY_FD");
+    // FIXME: Audit that the environment access only happens in single-threaded code.
+    unsafe { env::remove_var("NOTIFY_FD") };
     let mut notif = unsafe { File::from_raw_fd(fd) };
     notif.write_all(b"READY=1\n")?;
     Ok(())
@@ -425,5 +468,24 @@ impl Drop for ShutdownTracy {
         unsafe {
             tracy_client::sys::___tracy_shutdown_profiler();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::session_desktop;
+
+    #[test]
+    fn a_session_keeps_the_desktops_listed_after_niri() {
+        assert_eq!(session_desktop(Some("niri:KDE")), "niri:KDE");
+        assert_eq!(session_desktop(Some("niri")), "niri");
+    }
+
+    #[test]
+    fn a_session_is_niri_whatever_else_it_was_started_from() {
+        assert_eq!(session_desktop(None), "niri");
+        assert_eq!(session_desktop(Some("")), "niri");
+        assert_eq!(session_desktop(Some("KDE")), "niri");
+        assert_eq!(session_desktop(Some("KDE:niri")), "niri");
     }
 }

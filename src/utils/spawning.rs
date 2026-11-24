@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::os::unix::process::CommandExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
@@ -64,6 +64,17 @@ pub fn restore_nofile_rlimit() {
 
 /// Spawns the command to run independently of the compositor.
 pub fn spawn<T: AsRef<OsStr> + Send + 'static>(command: Vec<T>, token: Option<XdgActivationToken>) {
+    spawn_with(command, token, None, Vec::new());
+}
+
+/// [`spawn`] in the directory `cwd`, with the variables `env` set on top of the configured
+/// environment.
+pub fn spawn_with<T: AsRef<OsStr> + Send + 'static>(
+    command: Vec<T>,
+    token: Option<XdgActivationToken>,
+    cwd: Option<PathBuf>,
+    env: Vec<(String, String)>,
+) {
     let _span = tracy_client::span!();
 
     if command.is_empty() {
@@ -75,7 +86,7 @@ pub fn spawn<T: AsRef<OsStr> + Send + 'static>(command: Vec<T>, token: Option<Xd
         .name("Command Spawner".to_owned())
         .spawn(move || {
             let (command, args) = command.split_first().unwrap();
-            spawn_sync(command, args, token);
+            spawn_sync(command, args, token, cwd.as_deref(), &env);
         });
 
     if let Err(err) = res {
@@ -97,6 +108,8 @@ fn spawn_sync(
     command: impl AsRef<OsStr>,
     args: impl IntoIterator<Item = impl AsRef<OsStr>>,
     token: Option<XdgActivationToken>,
+    cwd: Option<&Path>,
+    extra_env: &[(String, String)],
 ) {
     let _span = tracy_client::span!();
 
@@ -148,6 +161,10 @@ fn spawn_sync(
         }
     }
     drop(env);
+    process.envs(extra_env.iter().map(|(name, value)| (name, value)));
+    if let Some(cwd) = cwd {
+        process.current_dir(cwd);
+    }
 
     if let Some(token) = token.as_ref() {
         process.env("XDG_ACTIVATION_TOKEN", token.as_str());

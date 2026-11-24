@@ -6,22 +6,31 @@ use std::time::Duration;
 
 use niri_config::Config;
 use ordered_float::NotNan;
+#[cfg(feature = "text")]
 use pangocairo::cairo::{self, ImageSurface};
+#[cfg(feature = "text")]
 use pangocairo::pango::FontDescription;
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::output::Output;
+#[cfg(feature = "text")]
 use smithay::reexports::gbm::Format as Fourcc;
-use smithay::utils::{Point, Transform};
+use smithay::utils::Point;
+#[cfg(feature = "text")]
+use smithay::utils::Transform;
 
 use crate::animation::{Animation, Clock};
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
+#[cfg(not(feature = "text"))]
+use crate::ui::textless::Panel;
 use crate::utils::{output_size, to_physical_precise_round};
 
 const PADDING: i32 = 8;
+#[cfg(feature = "text")]
 const FONT: &str = "sans 14px";
+#[cfg(feature = "text")]
 const BORDER: i32 = 4;
 
 pub struct ConfigErrorNotification {
@@ -174,6 +183,7 @@ impl ConfigErrorNotification {
     }
 }
 
+#[cfg(feature = "text")]
 fn render(
     renderer: &mut GlesRenderer,
     scale: f64,
@@ -247,11 +257,27 @@ fn render(
     Ok(buffer)
 }
 
+#[cfg(not(feature = "text"))]
+fn render(
+    renderer: &mut GlesRenderer,
+    scale: f64,
+    created_path: Option<&Path>,
+) -> anyhow::Result<TextureBuffer<GlesTexture>> {
+    let color = if created_path.is_some() {
+        [0.5, 1., 0.5]
+    } else {
+        [1., 0.3, 0.3]
+    };
+    let width = to_physical_precise_round(scale, 512);
+    let height = to_physical_precise_round(scale, PADDING * 3);
+    Panel::new(width, height, color).into_texture(renderer, scale)
+}
+
 pub fn error_text(markup: bool) -> String {
     let command = if markup {
         "<span face='monospace' bgcolor='#000000'>niri validate</span>"
     } else {
-        "niri validate"
+        "newm-rs validate"
     };
 
     format!("Failed to parse the config file. Please run {command} to see the errors.")

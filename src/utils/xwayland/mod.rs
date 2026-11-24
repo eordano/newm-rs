@@ -11,6 +11,12 @@ use smithay::reexports::rustix::{self};
 
 pub mod satellite;
 
+/// Whether `pid` is an xwayland-satellite process, the client that serves every X11 window.
+pub fn is_satellite_pid(pid: i32) -> bool {
+    std::fs::read_link(format!("/proc/{pid}/exe"))
+        .is_ok_and(|exe| exe.to_string_lossy().contains("xwayland-satellite"))
+}
+
 const TMP_UNIX_DIR: &str = "/tmp";
 const X11_TMP_UNIX_DIR: &str = "/tmp/.X11-unix";
 

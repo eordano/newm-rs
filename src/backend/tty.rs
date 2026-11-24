@@ -57,6 +57,7 @@ use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlob
 use smithay::wayland::drm_lease::{
     DrmLease, DrmLeaseBuilder, DrmLeaseRequest, DrmLeaseState, LeaseRejected,
 };
+use smithay::wayland::drm_syncobj::{supports_syncobj_eventfd, DrmSyncobjState};
 use smithay::wayland::presentation::Refresh;
 use smithay_drm_extras::drm_scanner::{DrmScanEvent, DrmScanner};
 use wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags;
@@ -798,6 +799,29 @@ impl Tty {
         }?;
         let device_fd = DrmDeviceFd::new(DeviceFd::from(fd));
 
+        // Explicit sync (linux-drm-syncobj-v1), as smithay's anvil offers it: on the primary
+        // device, when its driver can signal syncobj points through an eventfd. xwayland-satellite
+        // never sees the global: it passes it on to Xwayland, which then moves X11 clients' DRI3
+        // presents to explicit sync, and GPU-rendered X11 windows (Chromium on Vulkan) show
+        // half-drawn frames on that path. X11 windows keep implicit sync.
+        if node == self.primary_node && niri.drm_syncobj_state.is_none() {
+            if supports_syncobj_eventfd(&device_fd) {
+                info!("offering linux-drm-syncobj-v1 to every client but xwayland-satellite");
+                let dh = niri.display_handle.clone();
+                niri.drm_syncobj_state = Some(DrmSyncobjState::new_with_filter::<State, _>(
+                    &niri.display_handle,
+                    device_fd.clone(),
+                    move |client| {
+                        !client
+                            .get_credentials(&dh)
+                            .is_ok_and(|c| crate::utils::xwayland::is_satellite_pid(c.pid))
+                    },
+                ));
+            } else {
+                info!("the primary device has no syncobj eventfd: no explicit sync");
+            }
+        }
+
         let (drm, drm_notifier) = {
             let _span = tracy_client::span!("DrmDevice::new");
             DrmDevice::new(device_fd.clone(), false)
@@ -807,22 +831,30 @@ impl Tty {
             GbmDevice::new(device_fd.device_fd())
         }?;
 
+        let is_primary = node == self.primary_node || node == self.primary_render_node;
         let mut try_initialize_gpu = || {
             let display = unsafe { EGLDisplay::new(gbm.clone())? };
             let egl_device = EGLDevice::device_for_display(&display)?;
 
-            // Software EGL devices (e.g., llvmpipe/softpipe) are rejected for now. They have some
-            // problems (segfault on importing dmabufs from other renderers) and need to be
-            // excluded from some places like DRM leasing.
+            let software = egl_device.is_software();
             ensure!(
-                !egl_device.is_software(),
-                "software EGL renderers are skipped"
+                egl_device_usable(software, is_primary),
+                "software EGL renderers are skipped on secondary GPUs"
             );
+            if software {
+                warn!(
+                    "the primary GPU {node} has only a software EGL renderer (llvmpipe): \
+                     drawing on the CPU; is its GPU driver missing?"
+                );
+            }
 
+            // A software EGL device names no render node of its own: take the device's render
+            // node, which the primary render node was chosen from, so the primary renderer starts.
             let render_node = egl_device
                 .try_get_render_node()
                 .ok()
                 .flatten()
+                .or_else(|| node.node_with_type(NodeType::Render).and_then(Result::ok))
                 .unwrap_or(node);
             self.gpu_manager
                 .as_mut()
@@ -936,9 +968,14 @@ impl Tty {
             })
             .unwrap();
 
-        let drm_lease_state = DrmLeaseState::new::<State>(&niri.display_handle, &node)
-            .map_err(|err| warn!("error initializing DRM leasing for {node}: {err:?}"))
-            .ok();
+        // A lease hands a whole connector to the client, so sandboxed clients never see it.
+        let drm_lease_state = DrmLeaseState::new_with_filter::<State, _>(
+            &niri.display_handle,
+            &node,
+            crate::niri::client_is_unrestricted,
+        )
+        .map_err(|err| warn!("error initializing DRM leasing for {node}: {err:?}"))
+        .ok();
 
         let device = OutputDevice {
             token,
@@ -1180,6 +1217,14 @@ impl Tty {
 
         let mut device = self.devices.remove(&node).unwrap();
         let device_fd = device.drm.device_fd().device_fd();
+
+        if node == self.primary_node {
+            if let Some(syncobj) = niri.drm_syncobj_state.take() {
+                debug!("withdrawing linux-drm-syncobj-v1 with the primary device");
+                niri.display_handle
+                    .remove_global::<State>(syncobj.into_global());
+            }
+        }
 
         if let Some(lease_state) = &mut device.drm_lease_state {
             lease_state.disable_global::<State>();
@@ -1944,6 +1989,10 @@ impl Tty {
             xray: None,
         };
         let mut elements = niri.render_to_vec(ctx, output, true);
+
+        // How much of the output the synth background shows decides whether it keeps moving.
+        #[cfg(feature = "synth")]
+        niri.synth_measure(output, &elements);
 
         // Visualize the damage, if enabled.
         if niri.debug_draw_damage {
@@ -2886,6 +2935,15 @@ impl GammaProps {
     }
 }
 
+/// Whether a GPU's EGL device can render. Hardware always can. A software device (llvmpipe,
+/// softpipe) is skipped on a secondary GPU, whose outputs the primary GPU then renders: software
+/// renderers segfault importing dmabufs from other renderers. On the primary GPU it is the only
+/// renderer there is (a failed GPU driver, simpledrm, a VM without 3D), and skipping it left the
+/// session with no output at all.
+fn egl_device_usable(software: bool, primary: bool) -> bool {
+    !software || primary
+}
+
 fn primary_node_from_render_node(path: &Path) -> Option<(DrmNode, DrmNode)> {
     match DrmNode::from_path(path) {
         Ok(node) => {
@@ -3611,7 +3669,7 @@ unsafe fn init_libinput_plugin_system(libinput: &Libinput) {
         use input::ffi::libinput;
         use input::AsRaw as _;
 
-        extern "C" {
+        unsafe extern "C" {
             fn libinput_plugin_system_append_path(libinput: *const libinput, path: *const c_char);
             fn libinput_plugin_system_append_default_paths(libinput: *const libinput);
             fn libinput_plugin_system_load_plugins(
@@ -3645,7 +3703,17 @@ mod tests {
     use niri_config::output::Modeline;
     use niri_ipc::{HSyncPolarity, VSyncPolarity};
 
-    use crate::backend::tty::{calculate_drm_mode_from_modeline, calculate_mode_cvt};
+    use crate::backend::tty::{
+        calculate_drm_mode_from_modeline, calculate_mode_cvt, egl_device_usable,
+    };
+
+    #[test]
+    fn software_egl_renders_only_on_the_primary_gpu() {
+        assert!(egl_device_usable(false, true));
+        assert!(egl_device_usable(false, false));
+        assert!(egl_device_usable(true, true));
+        assert!(!egl_device_usable(true, false));
+    }
 
     #[test]
     fn test_calculate_drmmode_from_modeline() {

@@ -22,18 +22,13 @@ use niri_ipc::{
 };
 use smithay::backend::input::InputTime;
 use smithay::desktop::layer_map_for_output;
-use smithay::input::pointer::{
-    CursorIcon, CursorImageStatus, Focus, GrabStartData as PointerGrabStartData,
-};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::{Interest, LoopHandle, Mode, PostAction};
 use smithay::reexports::rustix::fs::unlink;
-use smithay::utils::SERIAL_COUNTER;
 use smithay::wayland::shell::wlr_layer::{KeyboardInteractivity, Layer};
 
 use crate::backend::IpcOutputMap;
 use crate::handlers::image_copy_capture::{source_mapped_id, source_output};
-use crate::input::pick_window_grab::PickWindowGrab;
 use crate::layout::workspace::WorkspaceId;
 use crate::niri::State;
 use crate::utils::{version, with_toplevel_role};
@@ -50,6 +45,10 @@ pub struct IpcServer {
     pub socket_path: Option<PathBuf>,
     event_streams: Rc<RefCell<Vec<EventStreamSender>>>,
     event_stream_state: Rc<RefCell<EventStreamState>>,
+    /// The floating-follow mode last written beside the socket (see
+    /// [`IpcServer::write_floating_follow`]).
+    #[cfg(feature = "canvas")]
+    floating_follow: std::cell::Cell<Option<niri_ipc::FloatingFollow>>,
 }
 
 struct ClientCtx {
@@ -111,7 +110,47 @@ impl IpcServer {
             socket_path,
             event_streams: Rc::new(RefCell::new(Vec::new())),
             event_stream_state: Rc::new(RefCell::new(EventStreamState::default())),
+            #[cfg(feature = "canvas")]
+            floating_follow: std::cell::Cell::new(None),
         })
+    }
+
+    /// The file beside the socket that holds how floating windows follow the canvas camera,
+    /// `screen`, `parent` or `canvas`, for a bar to show: `$NIRI_SOCKET.floating-follow`.
+    #[cfg(feature = "canvas")]
+    fn floating_follow_path(&self) -> Option<PathBuf> {
+        let mut path = self.socket_path.clone()?.into_os_string();
+        path.push(".floating-follow");
+        Some(path.into())
+    }
+
+    /// Writes `mode` to the floating-follow file when it differs from the last one written.
+    #[cfg(feature = "canvas")]
+    pub fn write_floating_follow(&self, mode: niri_ipc::FloatingFollow) {
+        if self.floating_follow.replace(Some(mode)) == Some(mode) {
+            return;
+        }
+        let Some(path) = self.floating_follow_path() else {
+            return;
+        };
+        let mut tmp = path.clone().into_os_string();
+        tmp.push(".tmp");
+        let res = std::fs::write(&tmp, format!("{}\n", mode.name()))
+            .and_then(|()| std::fs::rename(&tmp, &path));
+        if let Err(err) = res {
+            warn!("error writing {path:?}: {err:?}");
+        }
+    }
+
+    /// A receiver of every event sent from now on, as an event stream client gets them.
+    #[cfg(test)]
+    pub fn subscribe(&self) -> Receiver<Event> {
+        let (events, rx) = async_channel::bounded(EVENT_STREAM_BUFFER_SIZE);
+        let (disconnect, _) = async_channel::bounded(1);
+        self.event_streams
+            .borrow_mut()
+            .push(EventStreamSender { events, disconnect });
+        rx
     }
 
     fn send_event(&self, event: Event) {
@@ -142,6 +181,10 @@ impl Drop for IpcServer {
     fn drop(&mut self) {
         if let Some(socket_path) = &self.socket_path {
             let _ = unlink(socket_path);
+        }
+        #[cfg(feature = "canvas")]
+        if let Some(path) = self.floating_follow_path() {
+            let _ = unlink(&path);
         }
     }
 }
@@ -345,23 +388,7 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
         Request::PickWindow => {
             let (tx, rx) = async_channel::bounded(1);
             ctx.event_loop.insert_idle(move |state| {
-                let pointer = state.niri.seat.get_pointer().unwrap();
-                let start_data = PointerGrabStartData {
-                    focus: None,
-                    button: 0,
-                    location: pointer.current_location(),
-                };
-                let grab = PickWindowGrab::new(start_data);
-                // The `WindowPickGrab` ungrab handler will cancel the previous ongoing pick, if
-                // any.
-                pointer.set_grab(state, grab, SERIAL_COUNTER.next_serial(), Focus::Clear);
-                state.niri.pick_window = Some(tx);
-                state
-                    .niri
-                    .cursor_manager
-                    .set_cursor_image(CursorImageStatus::Named(CursorIcon::Crosshair));
-                // Redraw to update the cursor.
-                state.niri.queue_redraw_all();
+                state.handle_pick_window(tx);
             });
             let result = rx.recv().await;
             let id = result.map_err(|_| String::from("error getting picked window info"))?;
@@ -458,6 +485,30 @@ async fn process(ctx: &ClientCtx, request: Request) -> Reply {
             let state = ctx.event_stream_state.borrow();
             let casts = state.casts.casts.values().cloned().collect();
             Response::Casts(casts)
+        }
+        #[cfg(feature = "canvas")]
+        request @ (Request::NewmOptions
+        | Request::NewmSetOption { .. }
+        | Request::NewmResetOption { .. }
+        | Request::NewmResetAll
+        | Request::NewmExport) => {
+            let (tx, rx) = async_channel::bounded(1);
+            ctx.event_loop.insert_idle(move |state| {
+                let _ = tx.send_blocking(state.newm_options_request(request));
+            });
+            let result = rx.recv().await;
+            result.map_err(|_| String::from("error handling the live settings request"))??
+        }
+        #[cfg(feature = "canvas")]
+        request @ (Request::NewmPlaceBlock(_)
+        | Request::NewmBlockStatus { .. }
+        | Request::NewmParkWindows) => {
+            let (tx, rx) = async_channel::bounded(1);
+            ctx.event_loop.insert_idle(move |state| {
+                let _ = tx.send_blocking(state.newm_block_request(request));
+            });
+            let result = rx.recv().await;
+            result.map_err(|_| String::from("error handling the block request"))??
         }
     };
 
@@ -1016,6 +1067,121 @@ impl State {
 
         let event = Event::ConfigLoaded { failed };
         state.apply(event.clone());
+        server.send_event(event);
+    }
+
+    /// Answers a live settings request: lists, sets, resets or exports newm's live options. A
+    /// set or reset applies the config file with the overrides through
+    /// [`State::reload_config`], as a config file reload does.
+    #[cfg(feature = "canvas")]
+    pub fn newm_options_request(&mut self, request: Request) -> Reply {
+        self.newm_report_displays();
+        let live = &mut self.niri.live_options;
+        match request {
+            Request::NewmOptions => return Ok(Response::NewmOptions(live.options())),
+            Request::NewmExport => {
+                let kdl = live.export(&format!("newm-rs {}", version()));
+                return Ok(Response::NewmExport { kdl });
+            }
+            Request::NewmSetOption { key, value } => live.set(&key, value)?,
+            Request::NewmResetOption { key } => live.reset(&key)?,
+            Request::NewmResetAll => live.reset_all(),
+            _ => return Err(String::from("not a live settings request")),
+        }
+        let config = self.niri.live_options.effective();
+        self.reload_config(Ok(config));
+        self.ipc_newm_options_changed();
+        Ok(Response::Handled)
+    }
+
+    /// Answers a block request: places a block on the focused canvas and launches its windows,
+    /// reports which windows took a block's slots, or parks the focused canvas's windows.
+    #[cfg(feature = "canvas")]
+    pub fn newm_block_request(&mut self, request: Request) -> Reply {
+        use crate::layout::canvas::RestoreWindow;
+        use crate::session::{launch, Launch, RESTORE_LIFETIME};
+
+        let response = match request {
+            Request::NewmPlaceBlock(block) => {
+                if block.windows.iter().any(|w| w.command.is_empty()) {
+                    return Err(String::from("bad block"));
+                }
+                let slots = block
+                    .windows
+                    .iter()
+                    .map(|w| RestoreWindow {
+                        app_id: w.app_id.clone(),
+                        title: None,
+                        rect: newm_canvas::Rect::new(w.rect.0, w.rect.1, w.rect.2, w.rect.3),
+                    })
+                    .collect();
+                let (id, origin) = self.niri.layout.canvas_place_block(
+                    slots,
+                    block.anchor,
+                    block.focus,
+                    block.fly,
+                    RESTORE_LIFETIME,
+                )?;
+                for w in block.windows {
+                    let l = Launch {
+                        command: w.command,
+                        cwd: w.cwd.map(PathBuf::from),
+                    };
+                    launch(&l, w.env.into_iter().collect());
+                }
+                Response::NewmBlock { id, origin }
+            }
+            Request::NewmBlockStatus { id } => {
+                let (windows, done) = self
+                    .niri
+                    .layout
+                    .canvas_block_status(id)
+                    .ok_or_else(|| String::from("no such block"))?;
+                let windows = windows
+                    .into_iter()
+                    .map(|w| w.map(|w| w.id().get()))
+                    .collect();
+                return Ok(Response::NewmBlockStatus { id, windows, done });
+            }
+            Request::NewmParkWindows => {
+                self.niri.layout.canvas_park();
+                Response::Handled
+            }
+            _ => return Err(String::from("not a block request")),
+        };
+        self.niri.queue_redraw_all();
+        Ok(response)
+    }
+
+    /// Tells the live options which displays are connected and the scale each is drawn at, so
+    /// each has its scale setting.
+    #[cfg(feature = "canvas")]
+    fn newm_report_displays(&mut self) {
+        let displays = self.niri.global_space.outputs().map(|output| {
+            let model = output.physical_properties().model;
+            niri_config::live::Display {
+                name: output.name(),
+                model: if model == "Unknown" {
+                    String::new()
+                } else {
+                    model
+                },
+                scale: output.current_scale().fractional_scale(),
+            }
+        });
+        let displays = displays.collect();
+        self.niri.live_options.set_displays(displays);
+    }
+
+    /// Sends every event stream the live settings as they are now.
+    #[cfg(feature = "canvas")]
+    pub fn ipc_newm_options_changed(&mut self) {
+        self.newm_report_displays();
+        let Some(server) = &self.niri.ipc_server else {
+            return;
+        };
+        let event = Event::NewmOptionsChanged(self.niri.live_options.options());
+        server.event_stream_state.borrow_mut().apply(event.clone());
         server.send_event(event);
     }
 

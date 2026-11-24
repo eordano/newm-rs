@@ -525,6 +525,14 @@ pub fn handle_msg(mut msg: Msg, json: bool, print_request: bool) -> anyhow::Resu
                     Event::TouchpadToggled { on } => {
                         println!("Touchpad enabled: {on}");
                     }
+                    #[cfg(feature = "canvas")]
+                    Event::NewmOptionsChanged(options) => {
+                        let overridden = options.iter().filter(|o| o.overridden).count();
+                        println!(
+                            "Live settings changed: {overridden} of {} overridden",
+                            options.len()
+                        );
+                    }
                 }
             }
         }

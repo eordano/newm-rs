@@ -1,29 +1,42 @@
 use std::cell::RefCell;
+#[cfg(feature = "text")]
 use std::cmp::max;
 use std::collections::HashMap;
 use std::fmt::Write as _;
+#[cfg(feature = "text")]
 use std::iter::zip;
 use std::rc::Rc;
 
 use niri_config::{Action, Bind, Config, Key, ModKey, Modifiers, Trigger};
+#[cfg(feature = "text")]
 use pangocairo::cairo::{self, ImageSurface};
+#[cfg(feature = "text")]
 use pangocairo::pango::{AttrColor, AttrInt, AttrList, AttrString, FontDescription, Weight};
 use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::input::keyboard::xkb::keysym_get_name;
 use smithay::output::{Output, WeakOutput};
+#[cfg(feature = "text")]
 use smithay::reexports::gbm::Format as Fourcc;
-use smithay::utils::{Scale, Transform};
+use smithay::utils::Scale;
+#[cfg(feature = "text")]
+use smithay::utils::Transform;
 
 use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
-use crate::utils::{output_size, to_physical_precise_round};
+use crate::utils::output_size;
+#[cfg(feature = "text")]
+use crate::utils::to_physical_precise_round;
 
+#[cfg(feature = "text")]
 const PADDING: i32 = 8;
 // const MARGIN: i32 = PADDING * 2;
+#[cfg(feature = "text")]
 const FONT: &str = "sans 14px";
+#[cfg(feature = "text")]
 const BORDER: i32 = 4;
+#[cfg(feature = "text")]
 const LINE_INTERVAL: i32 = 2;
 const TITLE: &str = "Important Hotkeys";
 
@@ -49,7 +62,7 @@ impl HotkeyOverlay {
     }
 
     pub fn show(&mut self) -> bool {
-        if !self.is_open {
+        if !self.is_open && cfg!(feature = "text") {
             self.is_open = true;
             true
         } else {
@@ -140,6 +153,7 @@ impl HotkeyOverlay {
             let key = key.map(|key| key_name(true, self.mod_key, &key));
             let key = key.as_deref().unwrap_or("not bound");
 
+            #[cfg(feature = "text")]
             let action = match pango::parse_markup(&action, '\0') {
                 Ok((_attrs, text, _accel)) => text,
                 Err(_) => action.into(),
@@ -331,6 +345,7 @@ fn collect_actions(config: &Config) -> Vec<&Action> {
     actions
 }
 
+#[cfg(feature = "text")]
 fn render(
     renderer: &mut GlesRenderer,
     config: &Config,
@@ -481,6 +496,16 @@ fn render(
     Ok(RenderedOverlay {
         buffer: Some(buffer),
     })
+}
+
+#[cfg(not(feature = "text"))]
+fn render(
+    _renderer: &mut GlesRenderer,
+    _config: &Config,
+    _mod_key: ModKey,
+    _scale: f64,
+) -> anyhow::Result<RenderedOverlay> {
+    Ok(RenderedOverlay { buffer: None })
 }
 
 fn action_name(action: &Action) -> String {

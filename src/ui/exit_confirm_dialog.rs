@@ -5,13 +5,18 @@ use std::sync::Mutex;
 
 use niri_config::Config;
 use ordered_float::NotNan;
+#[cfg(feature = "text")]
 use pangocairo::cairo::{self, ImageSurface};
+#[cfg(feature = "text")]
 use pangocairo::pango::{Alignment, FontDescription};
 use smithay::backend::renderer::element::utils::RescaleRenderElement;
 use smithay::backend::renderer::element::Kind;
 use smithay::output::Output;
+#[cfg(feature = "text")]
 use smithay::reexports::gbm::Format as Fourcc;
-use smithay::utils::{Point, Transform};
+use smithay::utils::Point;
+#[cfg(feature = "text")]
+use smithay::utils::Transform;
 
 use crate::animation::{Animation, Clock};
 use crate::niri_render_elements;
@@ -20,10 +25,14 @@ use crate::render_helpers::primary_gpu_texture::PrimaryGpuTextureRenderElement;
 use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
 use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
+#[cfg(not(feature = "text"))]
+use crate::ui::textless::Panel;
 use crate::utils::{output_size, to_physical_precise_round};
 
 const KEY_NAME: &str = "Enter";
+#[cfg(feature = "text")]
 const PADDING: i32 = 16;
+#[cfg(feature = "text")]
 const FONT: &str = "sans 14px";
 const BORDER: i32 = 8;
 const BACKDROP_COLOR: [f32; 4] = [0., 0., 0., 0.4];
@@ -222,6 +231,7 @@ impl ExitConfirmDialog {
     }
 }
 
+#[cfg(feature = "text")]
 fn render(scale: f64) -> anyhow::Result<MemoryBuffer> {
     let _span = tracy_client::span!("exit_confirm_dialog::render");
 
@@ -280,6 +290,15 @@ fn render(scale: f64) -> anyhow::Result<MemoryBuffer> {
     );
 
     Ok(buffer)
+}
+
+#[cfg(not(feature = "text"))]
+fn render(scale: f64) -> anyhow::Result<MemoryBuffer> {
+    let width = to_physical_precise_round(scale, 320);
+    let height = to_physical_precise_round(scale, 112);
+    let mut panel = Panel::new(width, height, [0.1, 0.1, 0.1]);
+    panel.frame(to_physical_precise_round(scale, BORDER), [1., 0.3, 0.3]);
+    Ok(panel.into_buffer(scale))
 }
 
 fn text(markup: bool) -> String {

@@ -37,6 +37,37 @@ fn remove_last_window_out_of_two() {
     check_ops(&mut mru, &ops);
 }
 
+#[test]
+fn every_window_is_its_own_entry_in_mru_order() {
+    let window = |app: &str, secs: u64| Thumbnail {
+        app_id: Some(app.to_owned()),
+        timestamp: Some(Duration::from_secs(secs)),
+        ..create_thumbnail()
+    };
+    let (a_old, b, a_new) = (window("app-a", 1), window("app-b", 2), window("app-a", 3));
+    let ids = [a_new.id, b.id, a_old.id];
+    let mut mru = WindowMru::from_thumbnails(vec![a_old, b, a_new]);
+    let listed: Vec<MappedId> = mru.thumbnails().map(|t| t.id).collect();
+    assert_eq!(
+        listed, ids,
+        "two windows of one app and one of another: three entries"
+    );
+    assert_eq!(mru.current_id, Some(ids[0]));
+
+    for id in [ids[1], ids[2], ids[0]] {
+        mru.forward();
+        assert_eq!(mru.current_id, Some(id), "Alt+Tab steps window by window");
+    }
+
+    mru.set_filter(MruFilter::AppId);
+    let listed: Vec<MappedId> = mru.thumbnails().map(|t| t.id).collect();
+    assert_eq!(
+        listed,
+        [ids[0], ids[2]],
+        "Alt+grave keeps the current window's app"
+    );
+}
+
 fn arbitrary_scope() -> impl Strategy<Value = MruScope> {
     prop_oneof![
         Just(MruScope::All),
