@@ -12,8 +12,8 @@ mod imp {
 
     use anyhow::{ensure, Context};
     use gtk::gdk;
-    use niri::animation::Clock;
-    use niri::render_helpers::{resources, shaders};
+    use newm_rs::animation::Clock;
+    use newm_rs::render_helpers::{resources, shaders};
     use smithay::backend::egl::ffi::egl;
     use smithay::backend::egl::EGLContext;
     use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};

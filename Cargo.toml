@@ -3,15 +3,19 @@ members = [
     "niri-config",
     "niri-ipc",
     "niri-visual-tests",
+    "newm-rs-lock",
+    "newm-canvas",
+    "newm-kde",
+    "newm-synth",
 ]
+exclude = ["newm-mac"]
 
 [workspace.package]
 version = "26.4.0"
-description = "A scrollable-tiling Wayland compositor"
-authors = ["Ivan Molodetskikh <yalterz@gmail.com>"]
+description = "A Wayland compositor with a strict 2D tile canvas: a fork of niri"
 license = "GPL-3.0-or-later"
-edition = "2021"
-repository = "https://github.com/niri-wm/niri"
+edition = "2024"
+repository = "https://github.com/eordano/newm-rs"
 rust-version = "1.87"
 
 [workspace.dependencies]
@@ -38,10 +42,9 @@ rev = "65aa86fa5236e41775c313408102a5d5c2d1e2ca"
 # path = "../smithay/smithay-drm-extras"
 
 [package]
-name = "niri"
+name = "newm-rs"
 version.workspace = true
 description.workspace = true
-authors.workspace = true
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -75,12 +78,15 @@ keyframe = { version = "1.1.1", default-features = false }
 libc = "0.2.189"
 libdisplay-info = "0.3.0"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_debug"] }
+newm-canvas = { path = "newm-canvas", optional = true }
+newm-kde = { path = "newm-kde", optional = true }
+newm-synth = { path = "newm-synth", optional = true }
 niri-config = { version = "26.4.0", path = "niri-config" }
 niri-ipc = { version = "26.4.0", path = "niri-ipc", features = ["clap"] }
 ordered-float = "5"
-pango = { version = "0.21.5", features = ["v1_44"] }
-pangocairo = "0.21.5"
 pipewire = { version = "0.10", optional = true, features = ["v0_3_33"] }
+pango = { version = "0.21.5", features = ["v1_44"], optional = true }
+pangocairo = { version = "0.21.5", optional = true }
 png = "0.18.1"
 portable-atomic = "1"
 profiling = "1.0.18"
@@ -129,13 +135,19 @@ xshell = "0.2.7"
 pkg-config = "0.3"
 
 [features]
-default = ["dbus", "systemd", "xdp-gnome-screencast"]
+default = ["dbus", "systemd", "xdp-gnome-screencast", "text", "synth"]
 # Enables D-Bus support (serve various freedesktop and GNOME interfaces, accessibility tree, power button handling).
-dbus = ["dep:zbus", "dep:async-io", "dep:accesskit", "dep:accesskit_unix"]
+dbus = [
+    "dep:zbus",
+    "dep:async-io",
+    "dep:accesskit",
+    "dep:accesskit_unix",
+    "dep:newm-kde",
+]
 # Enables systemd integration (global environment, apps in transient scopes).
 systemd = ["dbus"]
 # Enables screencasting support through xdg-desktop-portal-gnome.
-xdp-gnome-screencast = ["dbus", "pipewire"]
+xdp-gnome-screencast = ["dbus", "dep:pipewire"]
 # Enables the Tracy profiler instrumentation.
 profile-with-tracy = ["profiling/profile-with-tracy", "tracy-client/default", "smithay/tracy_gpu_profiling"]
 # Enables the on-demand Tracy profiler instrumentation.
@@ -144,6 +156,15 @@ profile-with-tracy-ondemand = ["profile-with-tracy", "tracy-client/ondemand", "t
 profile-with-tracy-allocations = ["profile-with-tracy"]
 # Enables dinit integration (global environment).
 dinit = []
+# Replaces the scrolling layout of tiled windows with newm's tile canvas.
+canvas = ["dep:newm-canvas", "dep:newm-kde", "niri-config/canvas", "niri-ipc/canvas"]
+# Writes the canvas usage log ($XDG_STATE_HOME/newm-rs/usage.jsonl) for tuning placement.
+telemetry = ["canvas"]
+# Draws newm-synth's animated background behind everything (`synth-background { }`), and
+# listens to the sound playing through PipeWire when `react-to-sound` asks.
+synth = ["dep:newm-synth", "dep:pipewire"]
+# Renders text with pango: the hotkey overlay, dialog and notification text, window titles.
+text = ["dep:pango", "dep:pangocairo"]
 
 [lints.clippy]
 new_without_default = "allow"
@@ -166,12 +187,12 @@ png.opt-level = 3
 [package.metadata.generate-rpm]
 version = "26.04"
 assets = [
-    { source = "target/release/niri", dest = "/usr/bin/", mode = "755" },
-    { source = "resources/niri-session", dest = "/usr/bin/", mode = "755" },
-    { source = "resources/niri.desktop", dest = "/usr/share/wayland-sessions/", mode = "644" },
+    { source = "target/release/newm-rs", dest = "/usr/bin/", mode = "755" },
+    { source = "resources/newm-rs-session", dest = "/usr/bin/", mode = "755" },
+    { source = "resources/newm-rs.desktop", dest = "/usr/share/wayland-sessions/", mode = "644" },
     { source = "resources/niri-portals.conf", dest = "/usr/share/xdg-desktop-portal/", mode = "644" },
-    { source = "resources/niri.service", dest = "/usr/lib/systemd/user/", mode = "644" },
-    { source = "resources/niri-shutdown.target", dest = "/usr/lib/systemd/user/", mode = "644" },
+    { source = "resources/newm-rs.service", dest = "/usr/lib/systemd/user/", mode = "644" },
+    { source = "resources/newm-rs-shutdown.target", dest = "/usr/lib/systemd/user/", mode = "644" },
 ]
 [package.metadata.generate-rpm.requires]
 alacritty = "*"
@@ -180,10 +201,10 @@ fuzzel = "*"
 [package.metadata.deb]
 depends = "alacritty, fuzzel"
 assets = [
-    ["target/release/niri", "usr/bin/", "755"],
-    ["resources/niri-session", "usr/bin/", "755"],
-    ["resources/niri.desktop", "/usr/share/wayland-sessions/", "644"],
+    ["target/release/newm-rs", "usr/bin/", "755"],
+    ["resources/newm-rs-session", "usr/bin/", "755"],
+    ["resources/newm-rs.desktop", "/usr/share/wayland-sessions/", "644"],
     ["resources/niri-portals.conf", "/usr/share/xdg-desktop-portal/", "644"],
-    ["resources/niri.service", "/usr/lib/systemd/user/", "644"],
-    ["resources/niri-shutdown.target", "/usr/lib/systemd/user/", "644"],
+    ["resources/newm-rs.service", "/usr/lib/systemd/user/", "644"],
+    ["resources/newm-rs-shutdown.target", "/usr/lib/systemd/user/", "644"],
 ]

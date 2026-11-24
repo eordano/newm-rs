@@ -1,4 +1,4 @@
-use niri::render_helpers::border::BorderRenderElement;
+use newm_rs::render_helpers::border::BorderRenderElement;
 use niri_config::{Color, CornerRadius, GradientColorSpace, GradientInterpolation};
 use smithay::backend::renderer::element::RenderElement;
 use smithay::backend::renderer::gles::GlesRenderer;

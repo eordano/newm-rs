@@ -1,5 +1,5 @@
-use niri::layout::{LayoutElement, SizingMode};
-use niri::render_helpers::{RenderCtx, RenderTarget};
+use newm_rs::layout::{LayoutElement, SizingMode};
+use newm_rs::render_helpers::{RenderCtx, RenderTarget};
 use smithay::backend::renderer::element::RenderElement;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::utils::{Physical, Point, Scale, Size};

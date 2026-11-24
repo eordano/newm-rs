@@ -1,6 +1,6 @@
 # This flake file is community maintained
 {
-  description = "Niri: A scrollable-tiling Wayland compositor.";
+  description = "newm-rs: newm's strict tile canvas on niri.";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -11,7 +11,7 @@
     }:
     let
       revision = self.shortRev or self.dirtyShortRev or "unknown";
-      niri-package =
+      newm-rs-package =
         {
           lib,
           cairo,
@@ -22,21 +22,29 @@
           seatd,
           libxkbcommon,
           libgbm,
+          linux-pam,
           pango,
           pipewire,
+          pixman,
           pkg-config,
           rustPlatform,
           systemd,
           wayland,
-          installShellFiles,
           withDbus ? true,
           withSystemd ? true,
           withScreencastSupport ? true,
           withDinit ? false,
+          # newm's tile canvas; without it the build keeps niri's scrolling layout.
+          withCanvas ? true,
+          # Text rendered with pango (hotkey overlay, notifications, titles). newm-rs builds
+          # without it and draws stand-ins.
+          withText ? false,
+          # The canvas usage log, for tuning placement; off unless asked for.
+          withTelemetry ? false,
         }:
 
         rustPlatform.buildRustPackage {
-          pname = "niri";
+          pname = "newm-rs";
           version = revision;
 
           src = lib.fileset.toSource {
@@ -45,6 +53,10 @@
               ./niri-config
               ./niri-ipc
               ./niri-visual-tests
+              ./newm-canvas
+              ./newm-kde
+              ./newm-rs-lock
+              ./newm-synth
               ./resources
               ./src
               ./Cargo.toml
@@ -54,9 +66,7 @@
           };
 
           postPatch = ''
-            patchShebangs resources/niri-session
-            substituteInPlace resources/niri.service \
-              --replace-fail 'ExecStart=niri' "ExecStart=$out/bin/niri"
+            patchShebangs resources/newm-rs-session
           '';
 
           cargoLock = {
@@ -70,12 +80,10 @@
           nativeBuildInputs = [
             rustPlatform.bindgenHook
             pkg-config
-            installShellFiles
           ];
 
           buildInputs =
             [
-              cairo
               dbus
               libGL
               libdisplay-info_0_3
@@ -83,8 +91,13 @@
               seatd
               libxkbcommon
               libgbm
-              pango
+              linux-pam # newm-rs-lock
+              pixman
               wayland
+            ]
+            ++ lib.optionals withText [
+              cairo
+              pango
             ]
             ++ lib.optional (withDbus || withScreencastSupport || withSystemd) dbus
             ++ lib.optional withScreencastSupport pipewire
@@ -92,11 +105,30 @@
             ++ lib.optional withSystemd systemd;
 
           buildFeatures =
-            lib.optional withDbus "dbus"
+            lib.optional withCanvas "canvas"
+            ++ lib.optional withDbus "dbus"
             ++ lib.optional withDinit "dinit"
             ++ lib.optional withScreencastSupport "xdp-gnome-screencast"
-            ++ lib.optional withSystemd "systemd";
+            ++ lib.optional withSystemd "systemd"
+            ++ lib.optional withText "text"
+            ++ lib.optional withTelemetry "telemetry";
           buildNoDefaultFeatures = true;
+
+          # The compositor and the screen locker; the tests also cover the canvas crate.
+          cargoBuildFlags = [
+            "--package"
+            "newm-rs"
+            "--package"
+            "newm-rs-lock"
+          ];
+          cargoTestFlags = [
+            "--package"
+            "newm-rs"
+            "--package"
+            "newm-rs-lock"
+            "--package"
+            "newm-canvas"
+          ];
 
           # ever since this commit:
           # https://github.com/niri-wm/niri/commit/771ea1e81557ffe7af9cbdbec161601575b64d81
@@ -113,21 +145,25 @@
             "--skip=::egl"
           ];
 
-          postInstall =
-            ''
-              installShellCompletion --cmd niri \
-                --bash <($out/bin/niri completions bash) \
-                --fish <($out/bin/niri completions fish) \
-                --nushell <($out/bin/niri completions nushell) \
-                --zsh <($out/bin/niri completions zsh)
+          postInstall = ''
+            install -Dm755 resources/newm-rs-session -t $out/bin
 
-              install -Dm644 resources/niri.desktop -t $out/share/wayland-sessions
-              install -Dm644 resources/niri-portals.conf -t $out/share/xdg-desktop-portal
-            ''
-            + lib.optionalString withSystemd ''
-              install -Dm755 resources/niri-session $out/bin/niri-session
-              install -Dm644 resources/niri{.service,-shutdown.target} -t $out/lib/systemd/user
-            '';
+            install -Dm644 resources/niri-portals.conf -t $out/share/xdg-desktop-portal
+            install -Dm644 /dev/stdin $out/share/wayland-sessions/newm-rs.desktop <<EOF
+            [Desktop Entry]
+            Name=newm-rs
+            Comment=newm's tile canvas on niri
+            Exec=$out/bin/newm-rs-session
+            Type=Application
+            DesktopNames=niri;KDE
+            EOF
+          ''
+          + lib.optionalString withSystemd ''
+            sed -e "s|^ExecStart=newm-rs --session|ExecStart=$out/bin/newm-rs --session|" \
+                resources/newm-rs.service > newm-rs.service
+            install -Dm644 newm-rs.service -t $out/lib/systemd/user
+            install -Dm644 resources/newm-rs-shutdown.target -t $out/lib/systemd/user
+          '';
 
           env = {
             # Force linking with libEGL and libwayland-client so they end up in RPATH and
@@ -144,14 +180,14 @@
           };
 
           passthru = {
-            providedSessions = [ "niri" ];
+            providedSessions = [ "newm-rs" ];
           };
 
           meta = {
-            description = "Scrollable-tiling Wayland compositor";
-            homepage = "https://github.com/niri-wm/niri";
+            description = "newm's strict tile canvas on niri";
+            homepage = "https://github.com/eordano/newm-rs";
             license = lib.licenses.gpl3Only;
-            mainProgram = "niri";
+            mainProgram = "newm-rs";
             platforms = lib.platforms.linux;
           };
         };
@@ -162,19 +198,37 @@
 
       forAllSystems = lib.genAttrs systems;
       nixpkgsFor = forAllSystems (system: nixpkgs.legacyPackages.${system});
+
+      compat =
+        system: strict:
+        let
+          pkgs = nixpkgsFor.${system};
+          compositors = import ./compat/compositors.nix { inherit pkgs; };
+        in
+        import ./compat {
+          inherit pkgs strict;
+          compositor = compositors.newm-rs (pkgs.callPackage ./compat/newm-rs.nix { });
+        };
     in
     {
-      checks = forAllSystems (system: {
-        # We use the debug build here to save a bit of time
-        inherit (self.packages.${system}) niri-debug;
-      });
+      checks = forAllSystems (
+        system:
+        {
+          # We use the debug build here to save a bit of time
+          inherit (self.packages.${system}) newm-rs-debug;
+        }
+        // lib.optionalAttrs (system == "x86_64-linux") (compat system true)
+      );
+
+      legacyPackages.x86_64-linux.compat-report = compat "x86_64-linux" false;
 
       devShells = forAllSystems (
         system:
         let
           pkgs = nixpkgsFor.${system};
           rustfmt' = pkgs.rustfmt.override { asNightly = true; };
-          inherit (self.packages.${system}) niri;
+          # cargo builds take the default features, text included.
+          newm-rs = self.packages.${system}.newm-rs.override { withText = true; };
         in
         {
           default = pkgs.mkShell {
@@ -194,7 +248,7 @@
               pkgs.wrapGAppsHook4 # For `niri-visual-tests`
             ];
 
-            buildInputs = niri.buildInputs ++ [
+            buildInputs = newm-rs.buildInputs ++ [
               pkgs.libadwaita # For `niri-visual-tests`
             ];
 
@@ -204,7 +258,7 @@
               # in the package expression
               #
               # This should only be set with `RUSTFLAGS="$RUSTFLAGS -C your-flags"`
-              RUSTFLAGS = niri.RUSTFLAGS;
+              RUSTFLAGS = newm-rs.RUSTFLAGS;
             };
           };
         }
@@ -215,17 +269,17 @@
       packages = forAllSystems (
         system:
         let
-          niri = nixpkgsFor.${system}.callPackage niri-package { };
+          newm-rs = nixpkgsFor.${system}.callPackage newm-rs-package { };
         in
         {
-          inherit niri;
+          inherit newm-rs;
 
           # NOTE: This is for development purposes only
           #
           # It is primarily to help with quickly iterating on
           # changes made to the above expression - though it is
-          # also not stripped in order to better debug niri itself
-          niri-debug = niri.overrideAttrs (
+          # also not stripped in order to better debug newm-rs itself
+          newm-rs-debug = newm-rs.overrideAttrs (
             newAttrs: oldAttrs: {
               pname = oldAttrs.pname + "-debug";
 
@@ -236,12 +290,12 @@
             }
           );
 
-          default = niri;
+          default = newm-rs;
         }
       );
 
       overlays.default = final: _: {
-        niri = final.callPackage niri-package { };
+        newm-rs = final.callPackage newm-rs-package { };
       };
     };
 }

@@ -2,7 +2,6 @@
 name = "niri-config"
 version.workspace = true
 description.workspace = true
-authors.workspace = true
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -14,9 +13,13 @@ knuffel = "3.2.0"
 miette = { version = "5.10.0", features = ["fancy-no-backtrace"] }
 niri-ipc = { version = "26.4.0", path = "../niri-ipc" }
 regex = "1.13.1"
+serde_json.workspace = true
 smithay = { workspace = true, features = ["backend_libinput"] }
 tracing.workspace = true
 tracy-client.workspace = true
+
+[features]
+canvas = ["niri-ipc/canvas"]
 
 [dev-dependencies]
 insta.workspace = true

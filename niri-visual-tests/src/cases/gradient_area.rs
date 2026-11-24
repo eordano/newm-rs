@@ -1,8 +1,8 @@
 use std::f32::consts::{FRAC_PI_4, PI};
 use std::time::Duration;
 
-use niri::layout::focus_ring::FocusRing;
-use niri::render_helpers::border::BorderRenderElement;
+use newm_rs::layout::focus_ring::FocusRing;
+use newm_rs::render_helpers::border::BorderRenderElement;
 use niri_config::{Color, CornerRadius, GradientInterpolation};
 use smithay::backend::renderer::element::RenderElement;
 use smithay::backend::renderer::gles::GlesRenderer;

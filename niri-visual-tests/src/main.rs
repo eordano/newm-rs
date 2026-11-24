@@ -34,7 +34,7 @@ mod test_window;
 
 fn main() -> glib::ExitCode {
     let directives =
-        env::var("RUST_LOG").unwrap_or_else(|_| "niri-visual-tests=debug,niri=debug".to_owned());
+        env::var("RUST_LOG").unwrap_or_else(|_| "niri-visual-tests=debug,newm_rs=debug".to_owned());
     let env_filter = EnvFilter::builder().parse_lossy(directives);
     tracing_subscriber::fmt()
         .compact()

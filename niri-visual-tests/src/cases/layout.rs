@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use niri::animation::Clock;
-use niri::layout::{ActivateWindow, AddWindowTarget, LayoutElement as _, Options, SizingMode};
-use niri::render_helpers::{RenderCtx, RenderTarget};
+use newm_rs::animation::Clock;
+use newm_rs::layout::{ActivateWindow, AddWindowTarget, LayoutElement as _, Options, SizingMode};
+use newm_rs::render_helpers::{RenderCtx, RenderTarget};
 use niri_config::{Color, OutputName, PresetSize};
 use smithay::backend::renderer::element::RenderElement;
 use smithay::backend::renderer::gles::GlesRenderer;
@@ -20,7 +20,7 @@ pub struct Layout {
     output: Output,
     windows: Vec<TestWindow>,
     clock: Clock,
-    layout: niri::layout::Layout<TestWindow>,
+    layout: newm_rs::layout::Layout<TestWindow>,
     start_time: Duration,
     steps: HashMap<Duration, DynStepFn>,
 }
@@ -71,7 +71,7 @@ impl Layout {
             },
             ..Default::default()
         };
-        let mut layout = niri::layout::Layout::with_options(clock.clone(), options);
+        let mut layout = newm_rs::layout::Layout::with_options(clock.clone(), options);
         layout.add_output(output.clone(), None);
 
         let start_time = clock.now_unadjusted();

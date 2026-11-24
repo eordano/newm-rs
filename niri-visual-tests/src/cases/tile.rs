@@ -1,9 +1,9 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use niri::layout::Options;
-use niri::render_helpers::xray::XrayPos;
-use niri::render_helpers::{RenderCtx, RenderTarget};
+use newm_rs::layout::Options;
+use newm_rs::render_helpers::xray::XrayPos;
+use newm_rs::render_helpers::{RenderCtx, RenderTarget};
 use niri_config::Color;
 use smithay::backend::renderer::element::RenderElement;
 use smithay::backend::renderer::gles::GlesRenderer;
@@ -14,7 +14,7 @@ use crate::test_window::TestWindow;
 
 pub struct Tile {
     window: TestWindow,
-    tile: niri::layout::tile::Tile<TestWindow>,
+    tile: newm_rs::layout::tile::Tile<TestWindow>,
 }
 
 impl Tile {
@@ -75,7 +75,7 @@ impl Tile {
             ..Default::default()
         };
 
-        let mut tile = niri::layout::tile::Tile::new(
+        let mut tile = newm_rs::layout::tile::Tile::new(
             window.clone(),
             size.to_f64(),
             1.,
