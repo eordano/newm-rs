@@ -1,0 +1,8 @@
+[package]
+name = "newm-canvas"
+version = "0.1.0"
+description = "newm's strict tile canvas: the layout rules newm-rs places tiled windows by"
+license = "GPL-3.0-or-later"
+edition = "2024"
+
+[dependencies]

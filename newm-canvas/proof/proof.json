@@ -1,0 +1,2410 @@
+{
+  "scope": "newm-canvas's tiled-window decisions: rectangles on an integer tile grid, placement by the engine's layout (a free choice that place checks: targets, spans, no overlap, no island split) with the push as fallback on grow, a minimum's growth, move and swap, the lake/ocean fill on shrink and close unless it splits an island, the gather after a bridge closes or moves and gather_islands, which gathers every island, undo and redo, minimum spans, the zoom as a camera, and the view's least-movement rule, for every public operation (add, add_at, remove, resize, swap, send_to_edge, move_to, move_by, zoom_by, set_min, focus, set_screen, set_config, rename, undo, redo, gather_islands), and the recency list that picks the focus after a close. It also states the span principle: a window's span changes only through a resize or its minimum, whatever moves it (C47), and a tile that leaves its canvas carries its span to the next (C48); the niri glue that keeps a drag on its canvas and carries the span (src/layout/canvas/moves.rs) is anchored. It also states that the faster placement search reads the same values: the range tree over top-left corners (src/index.rs) returns exactly the rectangles a scan finds (overlapping, touching, disjoint), its flood numbers islands so splits, is_bridge and the search's leaf checks (the flood at the root, union-find and mending per step) answer Canvas.splits and Canvas.is_bridge, and the search's tile term from shared areas counts the tiles the scan counted, summing to rule 1's tiles reassigned in any placement order; the search step's candidate grid (difference arrays) finds the blocked, clear and pending candidates the scans found, and its room-local cost is fresh_term. Floating windows, rendering, animation and input are outside the model.",
+  "roots": {
+    "code": "..",
+    "glue": "../.."
+  },
+  "anchors": [
+    [
+      "A01",
+      "code",
+      "src/lib.rs",
+      "pub struct Rect {",
+      "Tile rectangle: i, j, w, h"
+    ],
+    [
+      "A02",
+      "code",
+      "src/lib.rs",
+      "pub const fn right(&self)",
+      "Right edge i + w"
+    ],
+    [
+      "A03",
+      "code",
+      "src/lib.rs",
+      "pub const fn overlaps(&self",
+      "Overlap: rows and columns both overlap"
+    ],
+    [
+      "A04",
+      "code",
+      "src/lib.rs",
+      "const fn shifted(",
+      "A rectangle moved by (di, dj)"
+    ],
+    [
+      "A05",
+      "code",
+      "src/lib.rs",
+      "pub const fn delta(self)",
+      "Unit step of a direction"
+    ],
+    [
+      "A06",
+      "code",
+      "src/lib.rs",
+      "pub const fn outward(self)",
+      "The direction an edge grows"
+    ],
+    [
+      "A07",
+      "code",
+      "src/lib.rs",
+      "pub struct Config {",
+      "Base tile size (1:1, zoom 0), zoom step and bounds"
+    ],
+    [
+      "A08",
+      "code",
+      "src/lib.rs",
+      "tile_w: 720.0,",
+      "Config::default, the model's shipped env"
+    ],
+    [
+      "A09",
+      "code",
+      "src/lib.rs",
+      "pub fn need(&self",
+      "Tiles a minimum size needs: from the 1:1 tile, whatever the zoom"
+    ],
+    [
+      "A10",
+      "code",
+      "src/lib.rs",
+      "pub fn fits_on_screen(&self",
+      "Whether a span fits on the screen at the current zoom: check()'s focus clause"
+    ],
+    [
+      "A11",
+      "code",
+      "src/lib.rs",
+      "pub fn edge_x(&self",
+      "Physical pixel of a vertical grid line"
+    ],
+    [
+      "A12",
+      "code",
+      "src/lib.rs",
+      "pub fn physical(&self",
+      "A rectangle snapped to physical pixels from its grid lines"
+    ],
+    [
+      "A13",
+      "code",
+      "src/lib.rs",
+      "pub fn ensure_visible(&mut self",
+      "Moves the view the least to show a rectangle"
+    ],
+    [
+      "A14",
+      "code",
+      "src/lib.rs",
+      "fn least(view",
+      "The least view movement along one axis"
+    ],
+    [
+      "A15",
+      "code",
+      "src/lib.rs",
+      "pub fn ensure_focus_visible(&mut self)",
+      "Shows the focused window"
+    ],
+    [
+      "A16",
+      "code",
+      "src/lib.rs",
+      "pub fn is_visible(&self",
+      "Whether a rectangle is on screen, with EPS"
+    ],
+    [
+      "A17",
+      "code",
+      "src/lib.rs",
+      "fn push(&mut self, mover",
+      "Sweeps the other windows in (lead, id) order, each past the mover and the windows swept before it"
+    ],
+    [
+      "A18",
+      "code",
+      "src/lib.rs",
+      "fn touches(side",
+      "A window lying against a rectangle on one side"
+    ],
+    [
+      "A19",
+      "code",
+      "src/lib.rs",
+      "pub fn chain(&self",
+      "The windows that slide into a freed gap"
+    ],
+    [
+      "A20",
+      "code",
+      "src/lib.rs",
+      "fn fill(&mut self",
+      "Closes a lake by sliding the chain; leaves ocean"
+    ],
+    [
+      "A21",
+      "code",
+      "src/lib.rs",
+      "fn enforce_min(&mut self",
+      "Grows a window to its need: wider, then taller, each step through grow"
+    ],
+    [
+      "A22",
+      "code",
+      "src/lib.rs",
+      "pub fn add(&mut self",
+      "Opens a window at its open_span on the spot spot picks; never pushes"
+    ],
+    [
+      "A23",
+      "code",
+      "src/lib.rs",
+      "pub fn remove(&mut self",
+      "Closes a window: fills its lake unless that splits an island, then gathers when it was a bridge; closing the focus focuses the head of recent"
+    ],
+    [
+      "A24",
+      "code",
+      "src/lib.rs",
+      "fn nearest(&self",
+      "The focus after closing the focused window when recent is empty (no window left)"
+    ],
+    [
+      "A25",
+      "code",
+      "src/lib.rs",
+      "pub fn set_min(&mut self",
+      "Updates a minimum size"
+    ],
+    [
+      "A26",
+      "code",
+      "src/lib.rs",
+      "pub fn focus_id(&mut self",
+      "Focuses a window through set_focus"
+    ],
+    [
+      "A27",
+      "code",
+      "src/lib.rs",
+      "pub fn resize(&mut self",
+      "Moves one edge: a grow takes place's layout, else pushes outward; a shrink fills unless that splits an island"
+    ],
+    [
+      "A28",
+      "code",
+      "src/lib.rs",
+      "pub fn swap(&mut self",
+      "Swaps the focus with a neighbour at their spans: place's layout, else the two-push fallback"
+    ],
+    [
+      "A29",
+      "code",
+      "src/lib.rs",
+      "fn take(&mut self",
+      "Takes a window out and fills its lake"
+    ],
+    [
+      "A30",
+      "code",
+      "src/lib.rs",
+      "pub fn send_to_edge(&mut self",
+      "Sends the focus past every other window in its row: place's layout, else take and measure the edge after the take"
+    ],
+    [
+      "A31",
+      "code",
+      "src/lib.rs",
+      "pub fn move_to(&mut self",
+      "Moves a window: nothing on its own rectangle; place's layout, else take and push right; gathers when it was a bridge"
+    ],
+    [
+      "A32",
+      "code",
+      "src/lib.rs",
+      "pub fn zoom_by(&mut self",
+      "Moves the camera: no window changes; refused only when the clamped zoom does not change; then shows the focus"
+    ],
+    [
+      "A33",
+      "code",
+      "src/lib.rs",
+      "pub fn set_screen(&mut self",
+      "A new screen size, then shows the focus"
+    ],
+    [
+      "A34",
+      "code",
+      "src/lib.rs",
+      "pub fn check(&self)",
+      "The invariants every operation keeps, recent holding each window id once among them"
+    ],
+    [
+      "A35",
+      "code",
+      "tests/replay.rs",
+      "fn apply(c: &mut Canvas",
+      "The replay harness's operation step"
+    ],
+    [
+      "A36",
+      "code",
+      "tests/replay.rs",
+      "fn order_kept(",
+      "The harness's order check after a grow"
+    ],
+    [
+      "A37",
+      "code",
+      "Cargo.toml",
+      "name = \"newm-canvas\"",
+      "The crate the replay check builds"
+    ],
+    [
+      "A38",
+      "code",
+      "src/lib.rs",
+      "const fn past(r: Rect",
+      "A rectangle moved along dir until it lies just past another"
+    ],
+    [
+      "A39",
+      "code",
+      "src/lib.rs",
+      "pub fn set_config(&mut self, config: Config) {",
+      "Replaces the config: the zoom clamped into the new bounds, every minimum enforced, the focus shown"
+    ],
+    [
+      "A40",
+      "code",
+      "src/lib.rs",
+      "pub fn rename(&mut self, from: Id, to: Id) -> bool {",
+      "Gives a window a new id unless it is taken or the window is missing; the focus and recent follow"
+    ],
+    [
+      "A41",
+      "code",
+      "src/lib.rs",
+      "//! and changes only through [`Canvas::zoom_by`], or when a config reload",
+      "The crate doc: the zoom changes only through zoom_by, or set_config's clamp"
+    ],
+    [
+      "A42",
+      "code",
+      "src/lib.rs",
+      "pub fn open_span(&self",
+      "The span a new window opens at: want cut to what fits, never below need"
+    ],
+    [
+      "A43",
+      "code",
+      "src/lib.rs",
+      "fn spot(&self",
+      "Where a new window opens: the free spot nearest the focus by gap (a corner is 1 away), then least view scroll, then side, then distance"
+    ],
+    [
+      "A44",
+      "code",
+      "src/lib.rs",
+      "pub fn move_by(&mut self",
+      "Moves a window one tile: place's layout, else push along dir; the gap stays open"
+    ],
+    [
+      "A45",
+      "code",
+      "src/lib.rs",
+      "fn set_focus(&mut self",
+      "Focuses a window and moves it to the front of recent"
+    ],
+    [
+      "A46",
+      "code",
+      "src/lib.rs",
+      "recent: Vec<Id>,",
+      "Window ids, the most recently focused first"
+    ],
+    [
+      "A47",
+      "code",
+      "tests/replay.rs",
+      "fn unmoved(",
+      "The harness check that every window but the new one kept its rectangle"
+    ],
+    [
+      "A48",
+      "code",
+      "src/lib.rs",
+      "pub fn fits_at_1to1(&self",
+      "Whether a span fits on the screen at 1:1: the cap of a grow and of open_span"
+    ],
+    [
+      "A49",
+      "code",
+      "src/lib.rs",
+      "pub fn base_tile(&self",
+      "The 1:1 tile that need, fits_at_1to1 and open_span read: the model's tile at zoom 0"
+    ],
+    [
+      "A50",
+      "code",
+      "src/lib.rs",
+      "pub fn scale(&self",
+      "The camera's scale, zoom_step^zoom: 1 at zoom 0, so the tile at zoom 0 is base_tile"
+    ],
+    [
+      "A51",
+      "code",
+      "tests/replay.rs",
+      "fn focus_shown(c: &Canvas)",
+      "The harness check after a zoom: the focus whole along an axis it fits on, else from its start"
+    ],
+    [
+      "A52",
+      "code",
+      "src/lib.rs",
+      "pub fn centred_view(&self",
+      "The view that keeps the canvas point under the middle of the screen when the camera's scale changes"
+    ],
+    [
+      "A53",
+      "code",
+      "tests/replay.rs",
+      "fn a_zoom_keeps_the_middle_of_the_screen()",
+      "The fixed zoom scenario on 2560x1440: the middle kept, the round trip, a scroll kept scaled"
+    ],
+    [
+      "A54",
+      "code",
+      "tests/replay.rs",
+      "fn a_laptop_canvas_pulls_back_about_the_middle()",
+      "The fixed zoom scenario on the 1428x920 canvas with 119x115 tiles"
+    ],
+    [
+      "A55",
+      "code",
+      "tests/replay.rs",
+      "fn middle_kept(was: &Canvas",
+      "The harness check after a zoom: the middle stays where the focus is whole at the view that keeps it"
+    ],
+    [
+      "A56",
+      "code",
+      "tests/replay.rs",
+      "fn round_trip(was: &Canvas",
+      "The harness check after a zoom: zooming back returns to the view"
+    ],
+    [
+      "A57",
+      "code",
+      "src/lib.rs",
+      "pub fn add_at(&mut self",
+      "Puts a window back at a saved rectangle: at the open_span of its span, on spot_near's spot, focused; never pushes"
+    ],
+    [
+      "A58",
+      "code",
+      "src/lib.rs",
+      "fn spot_near(&self",
+      "The free spot nearest a saved rectangle: rings out to far, each nearest, then upper, then left; the spot far along at's row is free"
+    ],
+    [
+      "A59",
+      "code",
+      "tests/replay.rs",
+      "fn add_at_puts_a_window_back_on_its_tiles_or_the_nearest_free_ones",
+      "The fixed add_at scenario on the 1428x920 canvas: saved tiles kept, a taken one moved up, a span cut, a minimum widened"
+    ],
+    [
+      "A60",
+      "glue",
+      "src/layout/canvas/moves.rs",
+      "pub fn drop_moved(&mut self",
+      "The drop of a drag that stayed on its canvas: one move_to to the tiles nearest where the window is drawn, then focus_id"
+    ],
+    [
+      "A61",
+      "glue",
+      "src/layout/canvas/moves.rs",
+      "pub(super) fn carry_span(",
+      "A tile leaving its canvas carries the span it held there"
+    ],
+    [
+      "A62",
+      "glue",
+      "src/layout/canvas/moves.rs",
+      "pub(super) fn arrival_span(",
+      "A tile arriving asks add for the span it carries, else per axis its rule, the size the app picked, its app's sibling or last span here, the default, one tile"
+    ],
+    [
+      "A63",
+      "glue",
+      "src/layout/canvas/moves.rs",
+      "pub(in crate::layout) fn canvas_keeps_move(",
+      "A drag stays on its canvas while the pointer is over the workspace holding the window"
+    ],
+    [
+      "A64",
+      "code",
+      "tests/replay.rs",
+      "fn spans_kept(",
+      "The harness check after every operation but a resize: each span kept, raised only to its need"
+    ],
+    [
+      "A65",
+      "glue",
+      "src/layout/canvas/moves.rs",
+      "pub fn is_on_grid(",
+      "Only a grid window (not fullscreen or maximized) keeps its drag on the canvas"
+    ],
+    [
+      "A66",
+      "code",
+      "src/lib.rs",
+      "pub const fn swapped(",
+      "Where a swap puts the focus and its neighbour: the pair keeps its extent along dir, trades its first row or column across it"
+    ],
+    [
+      "A67",
+      "code",
+      "tests/rules.rs",
+      "fn fewest(",
+      "The exact fewest tiles a layout reassigns with the movers on their targets, every other span kept and no overlap (rule 1), optionally under rule 2"
+    ],
+    [
+      "A68",
+      "code",
+      "tests/rules.rs",
+      "fn split(",
+      "Rule 2: two windows connected without the movers before that are not connected after"
+    ],
+    [
+      "A69",
+      "code",
+      "tests/rules.rs",
+      "fn bent(",
+      "Rule 3: a window other than the movers that changed both its row and its column"
+    ],
+    [
+      "A70",
+      "code",
+      "src/place.rs",
+      "pub fn splits(",
+      "Rule 2 broken: two windows but the movers, connected before, not connected after; islands before, then split_by"
+    ],
+    [
+      "A71",
+      "code",
+      "src/place.rs",
+      "pub fn is_bridge(",
+      "Whether a window's neighbours fall on different islands without it"
+    ],
+    [
+      "A72",
+      "code",
+      "src/place.rs",
+      "pub fn islands(",
+      "Islands: a flood through shared sides found in the range tree; the label is the least id of the island"
+    ],
+    [
+      "A73",
+      "code",
+      "src/place.rs",
+      "pub fn touch(",
+      "Two windows share a side of positive length"
+    ],
+    [
+      "A74",
+      "code",
+      "src/place.rs",
+      "pub fn accepts(&self",
+      "place's check of the engine's layout: length, targets, spans, no overlap, no split"
+    ],
+    [
+      "A75",
+      "code",
+      "src/place.rs",
+      "pub(crate) fn place(",
+      "Takes the engine's layout only when accepts holds, else false for the fallback"
+    ],
+    [
+      "A76",
+      "code",
+      "src/place.rs",
+      "pub(crate) fn gather(&mut self",
+      "Gathers a bridge's parts; kept only when every span is kept and nothing overlaps"
+    ],
+    [
+      "A77",
+      "code",
+      "src/place.rs",
+      "pub fn disjoint(",
+      "No two rectangles overlap: each overlaps none but itself, asked of the range tree"
+    ],
+    [
+      "A78",
+      "code",
+      "src/place.rs",
+      "pub fn arrange(",
+      "The placement engine, a free choice in the model"
+    ],
+    [
+      "A79",
+      "code",
+      "src/lib.rs",
+      "fn restore(&mut self",
+      "Undo/redo's restore: refuses a partial, empty-span or overlapping snapshot, then enforces every minimum"
+    ],
+    [
+      "A80",
+      "code",
+      "src/lib.rs",
+      "pub fn undo(&mut self)",
+      "Takes back the last rearrangement through restore"
+    ],
+    [
+      "A81",
+      "code",
+      "src/lib.rs",
+      "pub fn redo(&mut self)",
+      "Does again the last rearrangement undone through restore"
+    ],
+    [
+      "A82",
+      "code",
+      "src/lib.rs",
+      "fn enforce_all(&mut self)",
+      "Every minimum enforced in window order (set_config, restore)"
+    ],
+    [
+      "A83",
+      "code",
+      "tests/replay.rs",
+      "fn place_accepts_only_layouts_that_keep_the_rules()",
+      "The direct test of place's check, which the validation mutants must fail"
+    ],
+    [
+      "A84",
+      "code",
+      "src/lib.rs",
+      "fn restore_refuses_a_partial_overlapping_or_empty_snapshot()",
+      "The direct test of restore's check"
+    ],
+    [
+      "A85",
+      "code",
+      "tests/replay.rs",
+      "fn closing_never_splits_an_island()",
+      "The fixed close scenario of F07: the fill that would split an island stays undone"
+    ],
+    [
+      "A86",
+      "code",
+      "src/lib.rs",
+      "fn grow(&mut self, id: Id, target: Rect, dir: Dir) -> bool {",
+      "A minimum's growth step: place's layout when accepts passes, else the push along the growth"
+    ],
+    [
+      "A87",
+      "code",
+      "tests/replay.rs",
+      "fn a_grown_minimum_is_placed_without_splitting_an_island()",
+      "The fixed set_min scenario: a growth whose push would part an island is placed by the rules instead"
+    ],
+    [
+      "A88",
+      "code",
+      "src/index.rs",
+      "fn build(&mut self",
+      "Node::build into the flat tree: one corner is a leaf; more split at half, the bin keeps its least and greatest column and its halves rows merged"
+    ],
+    [
+      "A89",
+      "code",
+      "src/index.rs",
+      "fn corners(&self",
+      "Node::corners: the corners in a box; a whole bin by partition_point and take_while on its rows, a partial one through both halves"
+    ],
+    [
+      "A90",
+      "code",
+      "src/index.rs",
+      "pub fn new(rects",
+      "Index::new: corners sorted by column then position, the tree, the widest and tallest rectangle"
+    ],
+    [
+      "A91",
+      "code",
+      "src/index.rs",
+      "pub fn overlapping_into(",
+      "The corners in q widened by the widest and tallest, kept when the rectangle overlaps q, sorted"
+    ],
+    [
+      "A92",
+      "code",
+      "src/index.rs",
+      "pub fn touching_into(",
+      "The rectangles overlapping the ring around a that share a side with it"
+    ],
+    [
+      "A93",
+      "code",
+      "src/index.rs",
+      "pub const fn ring(",
+      "The tiles around a rectangle and the rectangle"
+    ],
+    [
+      "A94",
+      "code",
+      "src/index.rs",
+      "pub fn parts(&self)",
+      "Islands of the held rectangles: the flood through touching"
+    ],
+    [
+      "A95",
+      "code",
+      "src/index.rs",
+      "pub fn flood(",
+      "A stack flood from each position not yet reached, numbering its island by where it started"
+    ],
+    [
+      "A96",
+      "code",
+      "src/index.rs",
+      "pub const fn shared_area(",
+      "The tiles two rectangles share"
+    ],
+    [
+      "A97",
+      "code",
+      "src/place.rs",
+      "fn split_by(",
+      "splits from the islands before: one pass, the first island after of each island before"
+    ],
+    [
+      "A98",
+      "code",
+      "src/place.rs",
+      "fn fresh(o: &Rect",
+      "The tiles a window adds when it moves, against the windows moved already: old and new areas less twice their overlap less what each shares with the others counterparts"
+    ],
+    [
+      "A99",
+      "code",
+      "src/place.rs",
+      "fn splits(&self) -> bool",
+      "The island check of a complete layout the search reaches at its root: a flood through the sides before for windows that stayed, the range tree for moved ones, then one pass by position"
+    ],
+    [
+      "A100",
+      "code",
+      "src/place.rs",
+      "fn run(&mut self",
+      "The search loop: counts the budget and checks the bound; each step is A115"
+    ],
+    [
+      "A110",
+      "code",
+      "src/place.rs",
+      "struct Tally {",
+      "The search cost in whole numbers: tiles, area x distance, diagonal area, distance; total = tiles + dw*spread + gw*bent"
+    ],
+    [
+      "A111",
+      "code",
+      "src/place.rs",
+      "fn tally_with(",
+      "The tally of placing a window: fresh against every moved window, distance and diagonal unless it is a mover"
+    ],
+    [
+      "A112",
+      "code",
+      "src/place.rs",
+      "fn tally_of(",
+      "The tally of a whole layout (the seed), as placing its moved windows one by one"
+    ],
+    [
+      "A113",
+      "code",
+      "src/place.rs",
+      "fn put(&mut self",
+      "Places a window: moved list, cover counts of the windows whose rectangle before it lies on, conflict bits"
+    ],
+    [
+      "A114",
+      "code",
+      "src/place.rs",
+      "fn unput(",
+      "Takes back a placement"
+    ],
+    [
+      "A115",
+      "code",
+      "src/place.rs",
+      "fn step(&mut self",
+      "A search step: the first conflict bit; candidates through difference arrays over the candidate grid, one packed key; each child costed and bounded in the loop, complete ones checked by mend"
+    ],
+    [
+      "A116",
+      "code",
+      "src/place.rs",
+      "fn mend(&self",
+      "The islands now without the window being placed (union-find), and the islands before it must hold together"
+    ],
+    [
+      "A117",
+      "code",
+      "src/place.rs",
+      "fn mends(&self",
+      "Whether a candidate completing the layout splits an island: some island it must hold together lies on an island now it does not touch"
+    ],
+    [
+      "A101",
+      "code",
+      "src/lib.rs",
+      "pub fn gather_islands(&mut self)",
+      "Gathers every island into one: gather's slides over every window, kept only when every span is kept and nothing overlaps, recorded for undo when a window moved; then shows the focus"
+    ],
+    [
+      "A102",
+      "code",
+      "src/place.rs",
+      "pub(crate) fn gather_kept(&mut self",
+      "The check gather and gather_islands share: their moves are kept only when every span is kept and nothing overlaps, else nothing moves"
+    ],
+    [
+      "A118",
+      "code",
+      "src/place.rs",
+      "struct Sets(",
+      "Union-find over window positions: find with path halving, union hangs the larger root under the smaller"
+    ]
+  ],
+  "claims": [
+    {
+      "id": "C01",
+      "theorem": "Claims.no_overlap",
+      "anchors": [
+        "A17",
+        "A20",
+        "A21",
+        "A22",
+        "A23",
+        "A25",
+        "A26",
+        "A27",
+        "A28",
+        "A29",
+        "A30",
+        "A31",
+        "A32",
+        "A33",
+        "A03",
+        "A34",
+        "A39",
+        "A40",
+        "A44",
+        "A42",
+        "A43",
+        "A45",
+        "A57",
+        "A58",
+        "A74",
+        "A75",
+        "A78",
+        "A70",
+        "A72",
+        "A73",
+        "A76",
+        "A71",
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A86",
+        "A101",
+        "A102"
+      ],
+      "says": "Every operation, whatever layout the engine (arrange) or gather answers and whatever snapshot undo or redo restores (add, add_at, remove, resize, swap, send_to_edge, move_to, move_by, zoom_by, set_min, focus, set_screen, set_config, rename, gather_islands) maps a canvas of pairwise-disjoint windows with unique ids at their minimum spans to a canvas of pairwise-disjoint windows; a new config meets the model's hypotheses (zoom_min <= zoom_max, which clamp asserts). add, which never pushes, also needs check()'s focus clause (with windows on the canvas, the focus is one of them): without it the new window can land on another (C35); C17 shows every trace meets it. add_at needs no such clause: its search always ends on a free spot (C45)."
+    },
+    {
+      "id": "C02",
+      "theorem": "Push.push_disjoint",
+      "anchors": [
+        "A17",
+        "A38",
+        "A03"
+      ],
+      "says": "A push from windows with unique ids, the mover among them, leaves every pair of windows disjoint, whatever overlapped before."
+    },
+    {
+      "id": "C03",
+      "theorem": "Push.fill_disjoint",
+      "anchors": [
+        "A20",
+        "A19",
+        "A18"
+      ],
+      "says": "A lake fill slides its chain together and only into tiles no other window holds, so a disjoint canvas stays disjoint."
+    },
+    {
+      "id": "C04",
+      "theorem": "Claims.only_zoom_by_zooms",
+      "anchors": [
+        "A17",
+        "A20",
+        "A21",
+        "A22",
+        "A23",
+        "A25",
+        "A26",
+        "A27",
+        "A28",
+        "A29",
+        "A30",
+        "A31",
+        "A32",
+        "A33",
+        "A40",
+        "A44",
+        "A57",
+        "A74",
+        "A75",
+        "A78",
+        "A70",
+        "A72",
+        "A73",
+        "A76",
+        "A71",
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A86",
+        "A101",
+        "A102"
+      ],
+      "says": "No operation except zoom_by and set_config changes the zoom: add, add_at, remove, resize, swap, send_to_edge, move_to, move_by, set_min, focus, set_screen, rename and gather_islands keep it."
+    },
+    {
+      "id": "C05",
+      "theorem": "Claims.grow_fits",
+      "anchors": [
+        "A27",
+        "A06",
+        "A48",
+        "A49",
+        "A17",
+        "A74",
+        "A75"
+      ],
+      "says": "A grow that succeeds leaves the window at a span that fits on the screen at 1:1 (fits_at_1to1), whatever the zoom."
+    },
+    {
+      "id": "C06",
+      "theorem": "Claims.resize_respects_minimum",
+      "anchors": [
+        "A27",
+        "A09",
+        "A74",
+        "A75"
+      ],
+      "says": "No successful resize, grow or shrink, leaves the window below the span its minimum needs."
+    },
+    {
+      "id": "C07",
+      "theorem": "Claims.ocean_shrink_moves_nothing",
+      "anchors": [
+        "A27",
+        "A19",
+        "A20",
+        "A74",
+        "A75"
+      ],
+      "says": "A shrink whose freed strip is ocean (no window lies against its far side: the chain is empty) moves no other window."
+    },
+    {
+      "id": "C08",
+      "theorem": "Claims.ocean_close_moves_nothing",
+      "anchors": [
+        "A23",
+        "A19",
+        "A20",
+        "A71",
+        "A76",
+        "A70"
+      ],
+      "says": "Closing a window that was no bridge (is_bridge false), whose freed rectangle is ocean on both fill sides, moves no other window; a bridge's close may gather its parts."
+    },
+    {
+      "id": "C09",
+      "theorem": "Claims.minimum_spans",
+      "anchors": [
+        "A17",
+        "A20",
+        "A21",
+        "A22",
+        "A23",
+        "A25",
+        "A26",
+        "A27",
+        "A28",
+        "A29",
+        "A30",
+        "A31",
+        "A32",
+        "A33",
+        "A09",
+        "A34",
+        "A39",
+        "A40",
+        "A44",
+        "A42",
+        "A49",
+        "A57",
+        "A74",
+        "A75",
+        "A78",
+        "A70",
+        "A72",
+        "A73",
+        "A76",
+        "A71",
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A86",
+        "A101",
+        "A102"
+      ],
+      "says": "After every operation (add, add_at, remove, resize, swap, send_to_edge, move_to, move_by, zoom_by, set_min, focus, set_screen, set_config, rename, gather_islands) each window's span is at least need(min_w, min_h), which reads the 1:1 tile and no zoom, under the config in force after it (after set_config, the new one). A minimum's growth takes the engine's layout for that window and step when place accepts it, else pushes: the claim holds for every answer."
+    },
+    {
+      "id": "C10",
+      "theorem": "Claims.focus_stays_visible",
+      "anchors": [
+        "A17",
+        "A20",
+        "A21",
+        "A22",
+        "A23",
+        "A25",
+        "A26",
+        "A27",
+        "A28",
+        "A29",
+        "A30",
+        "A31",
+        "A32",
+        "A33",
+        "A13",
+        "A14",
+        "A15",
+        "A16",
+        "A39",
+        "A40",
+        "A34",
+        "A44",
+        "A45",
+        "A10",
+        "A57",
+        "A74",
+        "A75",
+        "A78",
+        "A70",
+        "A72",
+        "A73",
+        "A76",
+        "A71",
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A86",
+        "A101",
+        "A102"
+      ],
+      "says": "After every operation (move_by and gather_islands included; scroll_by and set_view excepted) a focused window whose span fits on the screen at the current zoom (fits_on_screen, check()'s clause) is fully on screen, under the config in force after it; for rename, given the focus is a window, as check() requires, since rename checks the new id only against the windows."
+    },
+    {
+      "id": "C11",
+      "theorem": "Claims.least_is_least",
+      "anchors": [
+        "A14"
+      ],
+      "says": "For a rectangle that fits, least returns a view that shows it and is no farther from the current view than any other view that shows it."
+    },
+    {
+      "id": "C12",
+      "theorem": "Claims.least_keeps_a_view_that_shows",
+      "anchors": [
+        "A14"
+      ],
+      "says": "least leaves the view unchanged when the rectangle is already on screen."
+    },
+    {
+      "id": "C13",
+      "theorem": "Claims.neighbours_share_physical_edges",
+      "anchors": [
+        "A11",
+        "A12",
+        "A02"
+      ],
+      "says": "For neighbours with a.right() == b.i (or a.bottom() == b.j), physical(a).x + physical(a).w == physical(b).x at any scale and view, since both are edge_x of the same grid line."
+    },
+    {
+      "id": "C14",
+      "theorem": "Order.push_keeps_order",
+      "anchors": [
+        "A17",
+        "A38",
+        "A36"
+      ],
+      "says": "A push in direction d keeps the order along d of every two windows other than the mover whose cross-axis ranges overlap: if a lay before b (touching counts) it still does, from any windows with unique ids and positive spans."
+    },
+    {
+      "id": "C16",
+      "theorem": "Claims.zoom_is_a_camera",
+      "anchors": [
+        "A32",
+        "A50",
+        "A09",
+        "A21",
+        "A86"
+      ],
+      "says": "The zoom is a camera: zoom_by keeps every window (rectangle, minimum and id: nothing moves or changes its tiles, enforce_min is not called), the focus and recent, sets the zoom to the clamped zoom + delta, and changes nothing when the zoom is unchanged, which is its only refusal."
+    },
+    {
+      "id": "C17",
+      "theorem": "Claims.every_trace_keeps_inv",
+      "anchors": [
+        "A17",
+        "A20",
+        "A21",
+        "A22",
+        "A23",
+        "A25",
+        "A26",
+        "A27",
+        "A28",
+        "A29",
+        "A30",
+        "A31",
+        "A32",
+        "A33",
+        "A34",
+        "A35",
+        "A39",
+        "A40",
+        "A44",
+        "A45",
+        "A46",
+        "A42",
+        "A43",
+        "A57",
+        "A58",
+        "A74",
+        "A75",
+        "A78",
+        "A70",
+        "A72",
+        "A73",
+        "A76",
+        "A71",
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A86",
+        "A101",
+        "A102"
+      ],
+      "says": "Every operation sequence from an empty canvas, config reloads and gather_islands included (each new config meeting the model's hypotheses), keeps the invariants check() tests: disjoint, unique ids, minimum spans under the config in force at its end, and recent holding each window id exactly once with the focus at its head (check()'s recency clause and the harness's focus check), so the focus is a window whenever one is left."
+    },
+    {
+      "id": "C26",
+      "theorem": "Claims.set_config_only_clamps",
+      "anchors": [
+        "A39"
+      ],
+      "says": "set_config changes the zoom only by clamping it into the new bounds [zoom_min, zoom_max], so the zoom is unchanged when the old one lies inside them."
+    },
+    {
+      "id": "C27",
+      "theorem": "Canvas.binds_set_config_and_rename",
+      "anchors": [
+        "A39",
+        "A40",
+        "A21",
+        "A86"
+      ],
+      "says": "The model's set_config and rename give the results tests/replay.rs set_config_clamps_the_zoom_and_enforces_minimums and rename_moves_the_id_and_the_focus check: the zoom clamped from above and below and kept inside the bounds, a minimum re-enforced at a halved tile width pushing its neighbour, a later add sized under the new config, rename refused onto a taken id and from a missing window, else the id moving with its rectangle and, when focused, the focus. The add after the config change opens below 2 (2,1), where the view need not scroll."
+    },
+    {
+      "id": "C18",
+      "theorem": "Canvas.replays_the_fixed_scenarios",
+      "anchors": [
+        "A27",
+        "A17",
+        "A22",
+        "A23",
+        "A20",
+        "A13"
+      ],
+      "says": "The model replays the fixed scenarios of tests/replay.rs: two by two tiles fit the 1428x920 canvas, a grow left pushes the neighbour, a grow stops at the screen edge, closing and shrinking close lakes and leave ocean, the view scrolls the least. Placement ops carry the layout the Rust test produced as the engine's answer; the view scenario opens its windows with add_at, as the test now does."
+    },
+    {
+      "id": "C21",
+      "theorem": "Canvas.shipped_is_good",
+      "anchors": [
+        "A07",
+        "A08",
+        "A09"
+      ],
+      "says": "Config::default meets the model's hypotheses: EPS is not negative, zoom_min <= zoom_max, need is at least one tile."
+    },
+    {
+      "id": "C22",
+      "theorem": "Canvas.binds_the_boundaries",
+      "anchors": [
+        "A08",
+        "A09",
+        "A48",
+        "A18",
+        "A19",
+        "A20",
+        "A24",
+        "A30",
+        "A32",
+        "A52"
+      ],
+      "says": "The model's constants and edges sit where the code's do: need at an exact 1:1 tile multiple and one pixel past it, fits one unit short of the screen, the zoom clamp bounds, a zoom past a bound refused with nothing changed, the view rescaled to keep the canvas point under the middle of the screen with no focused window, chain's touching and fill's slide on each side, nearest's distance and tie-break, send_to_edge with two windows. send_to_edge carries the engine's layout."
+    },
+    {
+      "id": "C23",
+      "theorem": "Push.precedes_includes_touching",
+      "anchors": [
+        "A36"
+      ],
+      "says": "Touching windows count as ordered, as in the harness's order_kept."
+    },
+    {
+      "id": "C20",
+      "theorem": "Findings.camera_keeps_it_on_screen",
+      "anchors": [
+        "A32",
+        "A13",
+        "A16"
+      ],
+      "says": "On F02's trace (a focused 1400 px minimum at two 720 px tiles on 1440x930) zoom_by(1) zooms, keeps the two tiles, and the focus fits and is fully on screen, as tests/replay.rs zooming_never_leaves_the_focus_wider_than_the_screen checks."
+    },
+    {
+      "id": "C24",
+      "theorem": "Push.settle_stops",
+      "anchors": [
+        "A17",
+        "A38"
+      ],
+      "says": "push's repetition stops: after one round more than the windows already swept, a window no longer moves, so the model's bounded rounds give the rectangle lib.rs's loop returns."
+    },
+    {
+      "id": "C25",
+      "theorem": "Findings.repaired_push_keeps_their_order",
+      "anchors": [
+        "A17",
+        "A31"
+      ],
+      "says": "On the windows F01's move_to pushes (2 left of 1 but after it in the window list, 3 put on both), push keeps 2 before 1: 2 goes to tile 2 and 1 to tile 3, where the old queue swapped them, as lib.rs's push_keeps_the_order_of_the_windows_it_lands_on checks on push itself (move_to reaches push only as place's fallback)."
+    },
+    {
+      "id": "C28",
+      "theorem": "Claims.add_moves_no_window",
+      "anchors": [
+        "A22",
+        "A43",
+        "A47",
+        "A73"
+      ],
+      "says": "add moves no other window: the windows after it are the windows before it, unchanged and in order, followed by the new one."
+    },
+    {
+      "id": "C29",
+      "theorem": "Claims.add_opens_at_open_span",
+      "anchors": [
+        "A22",
+        "A42",
+        "A73"
+      ],
+      "says": "add opens the new window at exactly open_span(min_w, min_h, want) on the screen it was called with, whatever the zoom."
+    },
+    {
+      "id": "C30",
+      "theorem": "Claims.recency_kept",
+      "anchors": [
+        "A45",
+        "A46",
+        "A22",
+        "A23",
+        "A26",
+        "A40",
+        "A44",
+        "A34",
+        "A35",
+        "A57",
+        "A74",
+        "A75",
+        "A78",
+        "A70",
+        "A72",
+        "A73",
+        "A76",
+        "A71",
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A101",
+        "A102"
+      ],
+      "says": "From a canvas with unique ids whose recent is a permutation of the window ids with the focus at its head, every operation (add, add_at, remove, resize, swap, send_to_edge, move_to, move_by, zoom_by, set_min, focus, set_screen, set_config, rename, gather_islands) keeps recent a permutation of the window ids (each id exactly once, check()'s clause) with the focus at its head."
+    },
+    {
+      "id": "C31",
+      "theorem": "Claims.closing_the_focus_focuses_the_last_used",
+      "anchors": [
+        "A23",
+        "A24",
+        "A45",
+        "A35",
+        "A71",
+        "A76"
+      ],
+      "says": "Closing the focused window, from a canvas with unique ids and recent as C30 keeps it, focuses the first id in recent other than it: the most recently used survivor, or nothing when no window is left (nearest is reached only then, and finds none)."
+    },
+    {
+      "id": "C32",
+      "theorem": "Order.move_by_moves_one_tile",
+      "anchors": [
+        "A44",
+        "A05",
+        "A04",
+        "A17",
+        "A35",
+        "A74",
+        "A75"
+      ],
+      "says": "move_by moves the window exactly one tile by dir.delta(): its rectangle after is its rectangle before shifted by the delta, whether place's layout or the push places the others."
+    },
+    {
+      "id": "C33",
+      "theorem": "Order.move_by_keeps_order",
+      "anchors": [
+        "A44",
+        "A17",
+        "A38",
+        "A36",
+        "A35",
+        "A74",
+        "A75"
+      ],
+      "says": "On the push fallback (the engine gives no layout), move_by keeps the order along dir of every two other windows whose cross-axis ranges overlap (C14's push order), from windows with unique ids and positive spans; a placed layout may reorder them (2 takes the tile 1 left)."
+    },
+    {
+      "id": "C34",
+      "theorem": "Canvas.binds_canvas_v2",
+      "anchors": [
+        "A44",
+        "A42",
+        "A43",
+        "A22",
+        "A23",
+        "A45",
+        "A40"
+      ],
+      "says": "The model gives the results tests/replay.rs's canvas v2 tests check on 2560x1440 at CONFIGS[3]: move_by takes the engine's layout, in which the neighbour takes the tile the moved window left (2 takes the tile 1 left); with the focus at (0, 0) a new window opens right, below, above, left, then at the corners (1, -1) and (1, 1), by the view scroll each spot needs and then its side (C71 shows the side order when no spot needs a scroll); a crowded row gives the nearest free spot, a wanted span is cut to what fits at 1:1 and never below the minimum, closing the focus returns to the last used window through a rename, and two undos and a redo restore the snapshots. The engine's answers are the Rust tests' results passed in, so these bind what place accepts, not which layout the search picks."
+    },
+    {
+      "id": "C35",
+      "theorem": "Claims.add_without_a_focus_overlaps",
+      "anchors": [
+        "A22",
+        "A34",
+        "A73"
+      ],
+      "says": "From a canvas with a window and no focus, which check() rejects, add opens the new window on that window: C01's focus premise for add is needed."
+    },
+    {
+      "id": "C36",
+      "theorem": "Claims.zoom_shows_the_focus",
+      "anchors": [
+        "A32",
+        "A13",
+        "A14",
+        "A15",
+        "A51"
+      ],
+      "says": "A zoom_by that changes the zoom shows the focus as far as it fits, magnified past 1:1 included: along an axis it fits on at the new zoom, whole; along an axis it is larger than the screen on, from its start (its top-left), as the harness's focus_shown checks. The view gets there through least from the rescaled view, the least movement C11 proves."
+    },
+    {
+      "id": "C37",
+      "theorem": "Canvas.binds_the_camera",
+      "anchors": [
+        "A32",
+        "A27",
+        "A42",
+        "A09",
+        "A48",
+        "A13"
+      ],
+      "says": "The model gives the results tests/replay.rs's camera tests check: magnified to zoom -2 a focused 2x2 window keeps its tiles, does not fit, and is shown from its top-left, the next focus is reached by the least scroll and the first again from its top-left; a grow stops at 2x2 on 1440x930 at zooms -2, -1, 0, 1 and 4; an 800x500 minimum takes 2x2 tiles at zooms -2, 0 and 4; a wanted 50x50 opens at 10x9 at zooms -2 and 3 on CONFIGS[3]; ghostty keeps 2x1 tiles through zoom 3 then -5. The second window opens with add_at at (2,0), as the test now does; grows carry the engine's layout."
+    },
+    {
+      "id": "C38",
+      "theorem": "Claims.zoom_keeps_the_middle",
+      "anchors": [
+        "A32",
+        "A52",
+        "A13",
+        "A14",
+        "A15",
+        "A55"
+      ],
+      "says": "A zoom_by that changes the zoom keeps the canvas point under the middle of the screen where it was, to within one model unit (1/10000 px) on screen at the new zoom, whenever showing the focus then scrolls nothing: there is no focus, or it lies whole on screen at the rescaled view (centred_view's (v + screen / 2) / t0 * t1 - screen / 2 on each axis); the tile at the old zoom is positive. Per axis 0 <= (2 v + sc) t1 - (2 v' + sc) t0 < 2 t0, as the harness's middle_kept checks."
+    },
+    {
+      "id": "C39",
+      "theorem": "Claims.zoom_out_and_back",
+      "anchors": [
+        "A32",
+        "A52",
+        "A13",
+        "A14",
+        "A15",
+        "A56"
+      ],
+      "says": "Pulling the camera back d > 0 steps and coming closer d steps again gives back the same canvas, view included, when neither zoom is clamped, the view is one ensure_focus_visible leaves as it is (every operation but scroll_by and set_view ends there), each axis's tile shrinks enough that 2 t0 <= screen (t0 - t1), and the rescale lands exactly on the model's 1/10000 px unit: pulled back, a focus whole on screen stays whole with no scroll and the opposite rescale undoes the first; along an axis the focus overfills at the start zoom it is shown from its start before and after. Coming closer first returns only when that zoom does not scroll (C38's premise); the harness's round_trip checks both orders."
+    },
+    {
+      "id": "C40",
+      "theorem": "Canvas.binds_the_middle",
+      "anchors": [
+        "A53",
+        "A54",
+        "A32",
+        "A52"
+      ],
+      "says": "The model gives the views tests/replay.rs a_zoom_keeps_the_middle_of_the_screen and a_laptop_canvas_pulls_back_about_the_middle check: three 1x1 tiles on 2560x1440 at zooms 0, 1, 2, back to 0, then -1 (the least scroll down to show the focus) and 0 again (that scroll kept, scaled), and three 4x4 windows on a 1428x920 canvas with 119x115 tiles at zooms 0, 2, 0, -1 and 0."
+    },
+    {
+      "id": "C41",
+      "theorem": "Claims.middle_premises_met",
+      "anchors": [
+        "A32",
+        "A52"
+      ],
+      "says": "C38's and C39's premises are met: on binds_the_middle's three tiles at 2560x1440, pulling back one step keeps the middle and coming closer again gives back the canvas."
+    },
+    {
+      "id": "C42",
+      "theorem": "Claims.add_at_keeps_inv",
+      "anchors": [
+        "A57",
+        "A58",
+        "A42",
+        "A45",
+        "A46",
+        "A34",
+        "A35",
+        "A03"
+      ],
+      "says": "add_at keeps check()'s invariants without its focus clause, which add needs (C35): from pairwise-disjoint windows with unique ids at their minimum spans it leaves them so, from recent a permutation of the window ids with the focus at its head it leaves that so, and it focuses the new window, as the harness's AddAt step checks."
+    },
+    {
+      "id": "C43",
+      "theorem": "Claims.add_at_moves_no_window",
+      "anchors": [
+        "A57",
+        "A47",
+        "A35"
+      ],
+      "says": "add_at moves no other window: the windows after it are the windows before it, unchanged and in order, followed by the new one."
+    },
+    {
+      "id": "C44",
+      "theorem": "Claims.add_at_lands_on_at",
+      "anchors": [
+        "A57",
+        "A58",
+        "A42",
+        "A35"
+      ],
+      "says": "add_at opens the new window at exactly open_span(min_w, min_h, Some((at.w, at.h))) on the screen it was called with, whatever the zoom, and when at's tile at that span is free, on exactly that spot, as the harness's AddAt step checks."
+    },
+    {
+      "id": "C45",
+      "theorem": "Claims.spot_near_ends_free",
+      "anchors": [
+        "A58",
+        "A03"
+      ],
+      "says": "spot_near's search ends on a free spot: the find over the rings 0..=far returns a spot, so unwrap_or's fallback is never taken, and that spot overlaps no window and has the span asked for; the spot far tiles along at's row lies past every window's right edge."
+    },
+    {
+      "id": "C46",
+      "theorem": "Canvas.binds_add_at",
+      "anchors": [
+        "A57",
+        "A58",
+        "A59",
+        "A42"
+      ],
+      "says": "The model gives the rectangles tests/replay.rs add_at_puts_a_window_back_on_its_tiles_or_the_nearest_free_ones checks on the 1428x920 canvas (saved tiles kept, a taken one moved to the free spot above, a 3-tile width cut to 2, an 800 px minimum widened onto the nearest free tiles), each new window focused and recent newest first; and past a 3x3 window on 2560x1440 spot_near's order: a window put back on the covered tile goes two tiles up, the next two tiles left (the nearest first, then the upper, then the left)."
+    },
+    {
+      "id": "C47",
+      "theorem": "Spans.spans_change_only_by_resize",
+      "anchors": [
+        "A21",
+        "A22",
+        "A23",
+        "A25",
+        "A26",
+        "A29",
+        "A30",
+        "A31",
+        "A32",
+        "A33",
+        "A39",
+        "A40",
+        "A44",
+        "A57",
+        "A64",
+        "A28",
+        "A66",
+        "A74",
+        "A75",
+        "A78",
+        "A70",
+        "A72",
+        "A73",
+        "A76",
+        "A71",
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A86",
+        "A101",
+        "A102"
+      ],
+      "says": "The span principle: whatever an operation does, a window it does not resize keeps its span (w, h), raised only to what its minimum needs under the config the operation leaves. From a canvas meeting check()'s invariants, a window before and the window after with its id (followed through a rename) have, on each axis, the larger of the old span and the need, unless the operation resizes that window: add, add_at, remove, move_by, move_to, swap, send_to_edge, zoom_by, focus, set_screen, rename and gather_islands keep every span as it was, a resize keeps every span but its window's, and set_min and set_config raise one to the new need, never more. Undo and redo (Restore) put back a snapshot's spans and are outside it."
+    },
+    {
+      "id": "C48",
+      "theorem": "Spans.carried_span_opens",
+      "anchors": [
+        "A22",
+        "A42",
+        "A61",
+        "A62"
+      ],
+      "says": "A tile that leaves its canvas carries its span, and add on the canvas it arrives on opens it at exactly that span when the span fits that screen at 1:1 and is at least what its minimum needs; otherwise open_span cuts it to what fits, never below the need."
+    },
+    {
+      "id": "C49",
+      "theorem": "Spans.carried_spans",
+      "anchors": [
+        "A08",
+        "A42"
+      ],
+      "says": "C48's premises are met: on 2560x1440 with Config::default's 720x465 tiles a carried 2x2 span arrives 2x2, and a 4x2 span, wider than the three tiles the screen holds at 1:1, arrives cut to 3x2."
+    },
+    {
+      "id": "C50",
+      "theorem": "Claims.placed_layouts_keep_the_rules",
+      "anchors": [
+        "A74",
+        "A75",
+        "A70",
+        "A72",
+        "A73",
+        "A77"
+      ],
+      "says": "Rule 2 for placed layouts: a layout place accepts from the engine puts each target on its rectangle, keeps every other window's span (and id and minimum), overlaps nothing and splits no island."
+    },
+    {
+      "id": "C51",
+      "theorem": "Islands.fills_split_no_island",
+      "anchors": [
+        "A23",
+        "A27",
+        "A70",
+        "A20",
+        "A85"
+      ],
+      "says": "A close (of a window that was no bridge) or a shrink never splits an island: two windows connected without the closed or shrunk window before are connected after, whether the gap stays open or fills (splits is false for the layout it leaves)."
+    },
+    {
+      "id": "C52",
+      "theorem": "Claims.undo_keeps_check",
+      "anchors": [
+        "A79",
+        "A80",
+        "A81",
+        "A82",
+        "A34",
+        "A21",
+        "A86"
+      ],
+      "says": "Undo and redo keep check()'s invariants: from a canvas that holds them, restoring any snapshot leaves ids unique, windows disjoint, every window at least at the span its minimum needs now, recent a permutation of the ids with the focus at its head, and the focus shown."
+    },
+    {
+      "id": "C53",
+      "theorem": "Index.overlapping_scan",
+      "anchors": [
+        "A88",
+        "A89",
+        "A90",
+        "A91",
+        "A03"
+      ],
+      "says": "The range tree answers what a scan answers: for any list of rectangles and any query rectangle q, Index::overlapping returns exactly the positions whose rectangle overlaps q, ascending, as filtering every position did. A rectangle that overlaps q has its corner in q widened left by the widest and up by the tallest rectangle held, so the box query misses none, and the overlap test keeps only those that overlap."
+    },
+    {
+      "id": "C54",
+      "theorem": "Index.touching_scan",
+      "anchors": [
+        "A92",
+        "A93",
+        "A91",
+        "A73"
+      ],
+      "says": "With no span negative, Index::touching returns exactly the positions of the rectangles that share a side with a, ascending: every such rectangle overlaps the ring of tiles around a."
+    },
+    {
+      "id": "C55",
+      "theorem": "Index.disjoint_fast_pairwise",
+      "anchors": [
+        "A77",
+        "A91"
+      ],
+      "says": "place::disjoint through the range tree (each rectangle overlaps none but itself) answers what the pairwise scan answers (Canvas.pairwise), so place's and restore's no-overlap checks are unchanged."
+    },
+    {
+      "id": "C56",
+      "theorem": "Index.shared_area_cells",
+      "anchors": [
+        "A96",
+        "A115"
+      ],
+      "says": "shared_area(a, b) is the number of tiles of a that b holds: the kept term of a candidate, which the search counted tile by tile before."
+    },
+    {
+      "id": "C58",
+      "theorem": "Islands.flood_parts",
+      "anchors": [
+        "A95",
+        "A94"
+      ],
+      "says": "The flood numbers islands: given neighbour lists that hold exactly the positions adjacent to each (in any order) for a symmetric adjacency, every position gets a number, and two positions get the same number exactly when one reaches the other."
+    },
+    {
+      "id": "C59",
+      "theorem": "Islands.splits_fast_spec",
+      "anchors": [
+        "A70",
+        "A72",
+        "A97",
+        "A94",
+        "A92"
+      ],
+      "says": "With unique ids and no span negative, place::splits through the flood's islands and split_by's one pass answers Canvas.splits (connected by grow): place's rule 2 check, close's and shrink's are unchanged."
+    },
+    {
+      "id": "C60",
+      "theorem": "Islands.is_bridge_fast_spec",
+      "anchors": [
+        "A71",
+        "A72",
+        "A94"
+      ],
+      "says": "With unique ids and no span negative, is_bridge over the flood's islands answers Canvas.is_bridge."
+    },
+    {
+      "id": "C61",
+      "theorem": "Islands.leaf_splits_spec",
+      "anchors": [
+        "A99",
+        "A95",
+        "A92",
+        "A72"
+      ],
+      "says": "The search's island check at a complete layout it reaches at its root (Search::splits: the windows that stayed found through their sides before, the moved ones through the range tree and a scan, islands before numbered in order of first appearance, one pass by position) answers Canvas.splits of that layout, for unique ids and spans not negative."
+    },
+    {
+      "id": "C62",
+      "theorem": "Cost.fresh_term_cells",
+      "anchors": [
+        "A98",
+        "A110",
+        "A111",
+        "A112",
+        "A115",
+        "A96"
+      ],
+      "says": "Each moved window's tile term from shared areas (its old and new areas, less twice what they share, less what each shares with the other's counterpart in a window moved before it) is the number of tiles of its old or new rectangle but not both that no window moved before it holds, when the old rectangles are disjoint and so are the moved ones' new rectangles: the tiles the scan counted for it."
+    },
+    {
+      "id": "C63",
+      "theorem": "Cost.tiles_displaced",
+      "anchors": [
+        "A98",
+        "A110",
+        "A111",
+        "A112",
+        "A115",
+        "A96"
+      ],
+      "says": "Over a layout where nothing overlaps, before or after, the tile terms of the moved windows sum to rule 1's tiles reassigned (Rules.displaced): the tiles whose owner, a window or none, changes."
+    },
+    {
+      "id": "C64",
+      "theorem": "Grid.grid_sum",
+      "anchors": [
+        "A115",
+        "A03"
+      ],
+      "says": "The search step's candidate grid: each rectangle covers, through four corner updates of a difference array and the in-place 2D prefix sum, exactly the candidates that overlap it (cover_range: r.i - o.w < c.i < r.right and r.j - o.h < c.j < r.bottom, for any spans), so every cell holds the sum of the values of the rectangles overlapping its candidate."
+    },
+    {
+      "id": "C65",
+      "theorem": "Grid.blocked_scan",
+      "anchors": [
+        "A115"
+      ],
+      "says": "A candidate is blocked exactly when some placed window overlaps it, as the old scan found."
+    },
+    {
+      "id": "C66",
+      "theorem": "Grid.clear_scan",
+      "anchors": [
+        "A115",
+        "A91"
+      ],
+      "says": "A candidate is clear exactly when no window not placed, other than the one being placed, overlaps it, as the old scan found, given that a window not placed lies at its rectangle before (the search's invariant)."
+    },
+    {
+      "id": "C67",
+      "theorem": "Grid.pending_scan",
+      "anchors": [
+        "A115",
+        "A91"
+      ],
+      "says": "The pending charge of a candidate is the sum of the areas of the windows not placed, other than the one being placed, that overlap it: the old scan's sum, under the same invariant."
+    },
+    {
+      "id": "C68",
+      "theorem": "Grid.tiles_any_order",
+      "anchors": [
+        "A98",
+        "A110",
+        "A111",
+        "A113",
+        "A96"
+      ],
+      "says": "The tally's tile terms sum to rule 1's tiles reassigned in whatever order the windows were placed, so the depth-first order the search places them in counts what the window order counted (fresh_terms_perm, fresh_terms_insert)."
+    },
+    {
+      "id": "C69",
+      "theorem": "Grid.fresh_room",
+      "anchors": [
+        "A115",
+        "A98"
+      ],
+      "says": "A child's tile term in the search step, held (what o shares with every moved window's new rectangle) plus freed (what the candidate shares with the old rectangles of moved windows that overlap the room), is fresh_term against every moved window: an old rectangle outside the room shares no tile with any candidate (room_local)."
+    },
+    {
+      "id": "C70",
+      "theorem": "Islands.mends_spec",
+      "anchors": [
+        "A116",
+        "A117",
+        "A118",
+        "A115",
+        "A92"
+      ],
+      "says": "The search's island check for the layouts a placement completes (mend once per step: union-find over the touching pairs without the window being placed; mends per candidate: the islands it must hold together against the islands its spot touches) answers Canvas.splits of the completed layout, for unique ids, spans not negative and the window lying at its rectangle before."
+    },
+    {
+      "id": "C71",
+      "theorem": "Canvas.opens_right_below_left_above",
+      "anchors": [
+        "A22",
+        "A43",
+        "A79"
+      ],
+      "says": "Beside a focus the view shows whole (window 1 at (1, 1) on 2560x1440 at Config::default), no side spot needs a scroll, so the side decides: a new window opens right, then below, left, above, then at the corners, right ones first, and the view does not move (tests/replay.rs a_new_window_opens_right_below_left_above). Undo refuses a snapshot that names a window the canvas does not hold in place of one it does (lib.rs restore_refuses_a_partial_overlapping_or_empty_snapshot)."
+    }
+  ],
+  "findings": [
+    {
+      "id": "F01",
+      "priority": "P2",
+      "status": "repaired",
+      "evidence": "test",
+      "title": "push swaps the windows a moved window lands on",
+      "trigger": "move_to's push fallback (also a resize or enforce_min that grows by two or more tiles and finds no placement) puts a window over two windows lying side by side in one row, stored in the window vector in the opposite order.",
+      "consequence": "push moves both to the pusher's edge in vector order and the first then pushes the second: the two swap places (2 was left of 1 and ends right of it). With taller windows a pushed window can also jump past a neighbour it no longer overlaps. The push doc promises the order along dir is kept.",
+      "anchors": [
+        "A17",
+        "A31"
+      ],
+      "counterexample": "Findings.move_to_reverses_the_windows_it_lands_on",
+      "repair": "push sweeps the other windows in (lead, id) order, lead being the edge that faces the push; each moves just past the mover, if it overlaps it, and past every window swept before it that shares its cross range (5541f892).",
+      "test": "src/lib.rs push_keeps_the_order_of_the_windows_it_lands_on (on push itself: move_to reaches push only as place's fallback; tests/replay.rs's move_to_keeps_the_order_of_the_windows_it_lands_on became a_drop_lands_where_it_was_dropped_and_splits_nothing in 2494cb59)",
+      "claim": "C14"
+    },
+    {
+      "id": "F02",
+      "priority": "P2",
+      "status": "repaired",
+      "evidence": "test",
+      "title": "zoom_by can leave the focused window wider than the screen",
+      "trigger": "Before 3c0b8d52: zoom_by(+1) with a focused window whose minimum needs more tiles at the new zoom: a 1400 px minimum on a 1440 px screen is two 720 px tiles at zoom 0; zoom 1 checks two 576 px tiles, then enforce_min makes it three (1728 px).",
+      "consequence": "zoom_by returns true and the focused window no longer fits, so it cannot be shown whole; the doc says such a zoom is refused.",
+      "anchors": [
+        "A32",
+        "A21",
+        "A09"
+      ],
+      "counterexample": "Findings.zoom_out_leaves_the_focus_wider_than_the_screen",
+      "repair": "The zoom is a camera (3c0b8d52, the user's decision of 2026-11-17): need reads the 1:1 tile, so no zoom changes what a window needs, and zoom_by never calls enforce_min or moves a window; the focus keeps its span, and pulling back shows a span that fits at 1:1 whole (C16, C20). It replaces 5541f892's repair, which checked max(span, need) at the new zoom.",
+      "test": "tests/replay.rs zooming_never_leaves_the_focus_wider_than_the_screen (since 3c0b8d52: zoom 1 keeps the span, which fits and is visible)",
+      "claim": "C16"
+    },
+    {
+      "id": "F03",
+      "priority": "P3",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "The crate doc says only zoom_by changes the zoom; set_config clamps it too",
+      "trigger": "set_config with zoom bounds that exclude the current zoom: a canvas at zoom 0 given bounds 1..4.",
+      "consequence": "The zoom becomes 1 without a zoom_by, against the module doc (and C04 as it read before set_config). newm's canvas_config keeps Config::default's bounds, so newm itself does not reach it today.",
+      "anchors": [
+        "A39",
+        "A41"
+      ],
+      "counterexample": "Findings.set_config_moves_the_zoom",
+      "repair": "Amend the module doc: the zoom changes only through zoom_by, and set_config clamps it into new bounds (C26).",
+      "test": "None fails: the defect is the doc. tests/replay.rs set_config_clamps_the_zoom_and_enforces_minimums checks the clamp, and the random replay checks it after every set_config.",
+      "claim": "C26"
+    },
+    {
+      "id": "F04",
+      "priority": "P1",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "A drag dropped the window at a new window's span",
+      "trigger": "Super+drag (niri's interactive move) of a grid window past the 8 px start threshold, then the drop.",
+      "consequence": "The tile left the canvas mid-drag (its lake closed under the pointer) and the drop added it back as a new window, at its window rules' span or the canvas's default (960 px x 2/3 of the screen): a 1x1 or 15-tile window came back resized. Moving a window to another workspace or output did the same.",
+      "anchors": [
+        "A22",
+        "A23",
+        "A31",
+        "A60",
+        "A61",
+        "A62",
+        "A63",
+        "A65"
+      ],
+      "counterexample": "Findings.remove_then_add_is_not_a_move",
+      "repair": "src/layout/canvas/moves.rs: a drag over the window's own workspace stays on the canvas (canvas_keeps_move) and the drop is one move_to then focus_id (drop_moved), which keep the span (C47); a tile that leaves its canvas carries its span (carry_span) and arrives at it (arrival_span, C48).",
+      "test": "src/layout/tests/canvas.rs canvas_drag_keeps_the_span (failed before: the window left the canvas mid-drag and came back 1x1), canvas_drop_on_its_own_tiles_changes_nothing, canvas_window_keeps_its_span_on_another_workspace, and check_spans_kept after every operation of canvas_random_operations.",
+      "claim": "C47"
+    },
+    {
+      "id": "F05",
+      "priority": "P2",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "swap traded rectangles, so both windows changed span",
+      "trigger": "Ctrl+Super+H/J/K/L (swap with the neighbour) between windows of different spans.",
+      "consequence": "The focus took its neighbour's tiles and the neighbour the focus's (then each was raised to its need): a 2x2 window swapped with a 1x1 neighbour became 1x1 and the neighbour 2x2.",
+      "anchors": [
+        "A28",
+        "A66"
+      ],
+      "counterexample": "Findings.swap_traded_spans",
+      "repair": "User's rule (11-17): swap never resizes and never overlaps. Canvas::swapped keeps both spans: along the swap axis the pair keeps the extent it covers (the focus ends where the neighbour ended, the neighbour starts where the focus started), across it they trade their first row or column, so equal spans exchange rectangles as before. The neighbour steps out while the focus lands and pushes along dir, then comes back and pushes the other way; the last push leaves no overlap (C01).",
+      "test": "tests/replay.rs swap_keeps_both_spans_and_pushes_what_is_in_the_way (a 2x2 past a 1x1 with a window in the way, and back), the landing check after every random swap, spans_kept without the swap exemption; src/layout/tests/canvas.rs canvas_swap_keeps_both_spans.",
+      "claim": "C47"
+    },
+    {
+      "id": "F06",
+      "priority": "P2",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "A move reassigned more tiles than it must (rule 1, confirmed)",
+      "trigger": "move_by, move_to (the drag's drop), send_to_edge, swap and a grow that pushes; the survey (tests/rules.rs, 3000 traces on Config::default at 2560x1440) found the push or the lake fill reassigning more tiles than needed in 640 of 7078 move_by, 1018 of 3467 move_to, 330 of 2272 send_to_edge, 17 of 802 swap and 38 of 1695 grow.",
+      "consequence": "Moving 1 right into its 1x1 neighbour 2 pushes 2 along (3 tiles reassigned) where 2 could take the tile 1 left (2 tiles). move_to and send_to_edge close the lake the window left, sliding neighbours that need not move.",
+      "anchors": [
+        "A17",
+        "A20",
+        "A29",
+        "A31",
+        "A44",
+        "A30",
+        "A67"
+      ],
+      "counterexample": "Rules.move_reassigns_more_than_it_must",
+      "repair": "Repaired by src/place.rs (78009a0b): the engine places the windows a move lands on at the least cost in tiles reassigned, distance and diagonal moves; place accepts its layout only under rule 2. The push stays as the fallback past the search budget, where the example still holds.",
+      "test": "tests/rules.rs checks rule 1 by its exact search; tests/replay.rs move_by_lets_the_neighbour_take_the_freed_tile.",
+      "claim": "C50"
+    },
+    {
+      "id": "F07",
+      "priority": "P2",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "A rearrangement split an island (rule 2, confirmed)",
+      "trigger": "A push or a lake fill that drags a window off the only neighbour it had without the moved window: in the survey 4 of 1723 grow, 20 of 7084 move_by, 50 of 3472 move_to, 27 of 3442 close, 12 of 2276 send_to_edge, 1 of 804 swap; shrink never.",
+      "consequence": "Two windows touching, or connected through others, end up on separate islands though the window the user acted on was not the bridge between them.",
+      "anchors": [
+        "A17",
+        "A20",
+        "A23",
+        "A44",
+        "A67",
+        "A68"
+      ],
+      "counterexample": "Rules.rearrangement_splits_an_island",
+      "repair": "Repaired by src/place.rs: place refuses a layout that splits an island, and close and shrink keep a fill only when it splits nothing (C51); a bridge's close gathers its parts.",
+      "test": "tests/replay.rs closing_never_splits_an_island (kills the mutant that keeps a splitting fill), a_drop_lands_where_it_was_dropped_and_splits_nothing and place_accepts_only_layouts_that_keep_the_rules; tests/rules.rs.",
+      "claim": "C51"
+    },
+    {
+      "id": "F08",
+      "priority": "P3",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "A drop onto a window's own tiles moved a neighbour diagonally (rule 3, confirmed)",
+      "trigger": "move_to closes the gap the window left (sliding a neighbour one way) and then pushes right what it lands on (the other way); a close fills its gap from the right and from below. The survey (tests/rules.rs) found 10 of 3472 move_to and 1 of 3442 closes moving a window along both axes; grow, move_by, send_to_edge, shrink and swap never did.",
+      "consequence": "A window slides diagonally though it was only in the way. In the counterexample the drop puts window 2 back on its own tile, and window 1 still ends one row up and two columns right.",
+      "anchors": [
+        "A20",
+        "A29",
+        "A31",
+        "A17"
+      ],
+      "counterexample": "Rules.drop_moves_a_window_diagonally",
+      "repair": "Repaired: move_to changes nothing when the target is its own rectangle, and the engine charges a diagonal move (rule 3 as a cost, tests/rules.rs). The example keeps the push fallback's diagonal move.",
+      "test": "tests/rules.rs bent; Rules.drop_moves_a_window_diagonally checks the no-op.",
+      "claim": "C50"
+    },
+    {
+      "id": "F09",
+      "priority": "P1",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "Undo left a window below its minimum",
+      "trigger": "A set_min or set_config that raises a window's need after a rearrangement, then undo or redo.",
+      "consequence": "restore put the snapshot back as it was: the window drew below its app's minimum and check() failed; nothing checked that the snapshot overlapped nothing.",
+      "anchors": [
+        "A79",
+        "A80",
+        "A81",
+        "A82"
+      ],
+      "counterexample": "Findings.undo_left_a_window_below_its_minimum",
+      "repair": "restore refuses a snapshot that misses a window, has an empty span or overlaps, and enforces every minimum after it (enforce_all, as set_config).",
+      "test": "tests/replay.rs undo_raises_a_window_to_a_minimum_set_since, Undo and Redo in the random replay, and lib.rs restore_refuses_a_partial_overlapping_or_empty_snapshot.",
+      "claim": "C52"
+    },
+    {
+      "id": "F10",
+      "priority": "P3",
+      "status": "repaired",
+      "evidence": "model",
+      "title": "send_to_edge's push fallback could land the focus on a window",
+      "trigger": "send_to_edge when place takes no layout (past the search budget), with the focus left of every other window and a lake to its right.",
+      "consequence": "The fallback measured the edge before take's fill, which slid a neighbour into the tiles the focus left; the focus then overlapped it. Latent: the engine accepts its seed whenever the target is past every window.",
+      "anchors": [
+        "A30",
+        "A29"
+      ],
+      "counterexample": "Findings.send_fallback_landed_on_a_window",
+      "repair": "The fallback measures the edge after the take, as send_to_edge did before place-rules.",
+      "test": "C01 over every answer, None included; the random replay.",
+      "claim": "C01"
+    }
+  ],
+  "trusted": [],
+  "generate": [],
+  "checks": [
+    {
+      "name": "replay",
+      "run": [
+        "bash",
+        "replay.sh"
+      ]
+    }
+  ],
+  "mutants": [
+    {
+      "why": "a grow is no longer refused past the screen",
+      "in": "code:src/lib.rs",
+      "find": "(delta > 0 && !self.fits_at_1to1(new.w, new.h))",
+      "replace": "false",
+      "check": "replay"
+    },
+    {
+      "why": "a resize may go below the minimum span",
+      "in": "code:src/lib.rs",
+      "find": "if delta == 0 || new.w < nw || new.h < nh ||",
+      "replace": "if delta == 0 ||",
+      "check": "replay"
+    },
+    {
+      "why": "push lands a pushed window inside the pusher",
+      "in": "code:src/lib.rs",
+      "find": "Dir::Right => Rect::new(p.right(), r.j, r.w, r.h),",
+      "replace": "Dir::Right => Rect::new(p.right() - 1, r.j, r.w, r.h),",
+      "check": "replay"
+    },
+    {
+      "why": "push sorts by id alone",
+      "in": "code:src/lib.rs",
+      "find": "(lead, self.windows[k].id)",
+      "replace": "(0, self.windows[k].id)",
+      "check": "replay"
+    },
+    {
+      "why": "push ignores the windows it has swept",
+      "in": "code:src/lib.rs",
+      "find": "if shares && behind {",
+      "replace": "if false {",
+      "check": "replay"
+    },
+    {
+      "why": "a grow is capped at the current zoom, not at 1:1",
+      "in": "code:src/lib.rs",
+      "find": "!self.fits_at_1to1(new.w, new.h)",
+      "replace": "!self.fits_on_screen(new.w, new.h)",
+      "check": "replay"
+    },
+    {
+      "why": "set_config stops clamping the zoom",
+      "in": "code:src/lib.rs",
+      "find": "self.zoom = self.zoom.clamp(config.zoom_min, config.zoom_max);",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "set_config stops enforcing minimums",
+      "in": "code:src/lib.rs",
+      "find": "self.zoom = self.zoom.clamp(config.zoom_min, config.zoom_max);\n        self.enforce_all();",
+      "replace": "self.zoom = self.zoom.clamp(config.zoom_min, config.zoom_max);",
+      "check": "replay"
+    },
+    {
+      "why": "rename takes an id already on the canvas",
+      "in": "code:src/lib.rs",
+      "find": "        if self.index(to).is_some() {\n            return false;\n        }",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "rename leaves the focus on the old id",
+      "in": "code:src/lib.rs",
+      "find": "            self.focus = Some(to);",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "need reads the zoomed tile again (the zoom changes spans)",
+      "in": "code:src/lib.rs",
+      "find": "let (tw, th) = self.base_tile();\n        let n = |min: f64",
+      "replace": "let (tw, th) = self.tile_size();\n        let n = |min: f64",
+      "check": "replay"
+    },
+    {
+      "why": "open_span cuts a wanted span at the current zoom",
+      "in": "code:src/lib.rs",
+      "find": "let (tw, th) = self.base_tile();\n        let most =",
+      "replace": "let (tw, th) = self.tile_size();\n        let most =",
+      "check": "replay"
+    },
+    {
+      "why": "zoom_by refuses every magnification",
+      "in": "code:src/lib.rs",
+      "find": "if z == self.zoom {",
+      "replace": "if z <= self.zoom {",
+      "check": "replay"
+    },
+    {
+      "why": "zoom_by stops showing the focus",
+      "in": "code:src/lib.rs",
+      "find": "self.view = self.centred_view(self.view, from, self.scale());\n        self.ensure_focus_visible();",
+      "replace": "self.view = self.centred_view(self.view, from, self.scale());",
+      "check": "replay"
+    },
+    {
+      "why": "zoom_by keeps the top-left tile again",
+      "in": "code:src/lib.rs",
+      "find": "let about = |v: f64, screen: f64| (v + screen / 2.0) / from * to - screen / 2.0;",
+      "replace": "let about = |v: f64, _screen: f64| v / from * to;",
+      "check": "replay"
+    },
+    {
+      "why": "zoom_by keeps the bottom-right corner instead of the middle",
+      "in": "code:src/lib.rs",
+      "find": "(v + screen / 2.0) / from * to - screen / 2.0",
+      "replace": "(v + screen) / from * to - screen",
+      "check": "replay"
+    },
+    {
+      "why": "check() asks a focus that fits at 1:1 to be on screen",
+      "in": "code:src/lib.rs",
+      "find": "            && self.fits_on_screen(r.w, r.h)",
+      "replace": "            && self.fits_at_1to1(r.w, r.h)",
+      "check": "replay"
+    },
+    {
+      "why": "a shrink stops closing lakes",
+      "in": "code:src/lib.rs",
+      "find": "            self.fill(freed, side);\n",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "add opens right of the focus whether or not the spot is free",
+      "in": "code:src/lib.rs",
+      "find": "Some(f) => self.spot(f, w, h),",
+      "replace": "Some(f) => Rect::new(f.right(), f.j, w, h),",
+      "check": "replay"
+    },
+    {
+      "why": "spot counts a spot touching the focus only at a corner as beside it",
+      "in": "code:src/lib.rs",
+      "find": "i32::from(dx == 0 && dy == 0 && !place::touch(c, &f))",
+      "replace": "0",
+      "check": "replay"
+    },
+    {
+      "why": "open_span stops cutting a wanted span to the screen",
+      "in": "code:src/lib.rs",
+      "find": "ww.min(most(self.screen.0, tw)).max(nw),",
+      "replace": "ww.max(nw),",
+      "check": "replay"
+    },
+    {
+      "why": "move_by stops pushing",
+      "in": "code:src/lib.rs",
+      "find": "            self.push(id, dir);",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "set_focus appends instead of putting the id first",
+      "in": "code:src/lib.rs",
+      "find": "self.recent.insert(0, id);",
+      "replace": "self.recent.push(id);",
+      "check": "replay"
+    },
+    {
+      "why": "closing the focus focuses the nearest window, not the last used",
+      "in": "code:src/lib.rs",
+      "find": "self.recent.first().copied().or_else(|| self.nearest(freed))",
+      "replace": "self.nearest(freed)",
+      "check": "replay"
+    },
+    {
+      "why": "rename leaves recent on the old id",
+      "in": "code:src/lib.rs",
+      "find": "*r = to;",
+      "replace": "*r = from;",
+      "check": "replay"
+    },
+    {
+      "why": "add_at takes the saved tile whether or not it is free",
+      "in": "code:src/lib.rs",
+      "find": ".map(shifted)\n            .find(|r| self.free(r, &[]))",
+      "replace": ".map(shifted)\n            .find(|_| true)",
+      "check": "replay"
+    },
+    {
+      "why": "spot_near no longer tries the saved tile first",
+      "in": "code:src/lib.rs",
+      "find": "vec![(0, 0)]",
+      "replace": "vec![]",
+      "check": "replay"
+    },
+    {
+      "why": "spot_near's rings lose their order",
+      "in": "code:src/lib.rs",
+      "find": "ring.sort_by_key(|&(di, dj)| (di * di + dj * dj, dj, di));",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "add_at opens at the saved span, not its open span",
+      "in": "code:src/lib.rs",
+      "find": "let (w, h) = self.open_span(min_w, min_h, Some((at.w, at.h)));",
+      "replace": "let (w, h) = (at.w, at.h);",
+      "check": "replay"
+    },
+    {
+      "why": "the model's widen never widens",
+      "in": "Canvas.v",
+      "find": "if rw r <? fst (need e (wmin w))",
+      "replace": "if false"
+    },
+    {
+      "why": "the model's push lands a window on the pusher's left edge",
+      "in": "Canvas.v",
+      "find": "| Right => Rect (right p) (rj r) (rw r) (rh r)",
+      "replace": "| Right => Rect (ri p) (rj r) (rw r) (rh r)"
+    },
+    {
+      "why": "the model's fill ignores other windows",
+      "in": "Canvas.v",
+      "find": "negb (mem (wid w) ch) || free (shifted (wrect w) (di * k) (dj * k)) ch ws",
+      "replace": "true"
+    },
+    {
+      "why": "the model's zoom keeps the top-left tile again",
+      "in": "Canvas.v",
+      "find": "Definition centred t0 t1 sc v := ((2 * v + sc) * t1 - sc * t0) / (2 * t0).",
+      "replace": "Definition centred t0 t1 sc v := v * t1 / t0."
+    },
+    {
+      "why": "the model's rescale keeps the half screen it adds",
+      "in": "Canvas.v",
+      "find": "((2 * v + sc) * t1 - sc * t0) / (2 * t0)",
+      "replace": "((2 * v + sc) * t1) / (2 * t0)"
+    },
+    {
+      "why": "the model's spot_near prefers the left spot to the upper one",
+      "in": "Canvas.v",
+      "find": "Z.compare (snd p) (snd q),\n    Z.compare (fst p) (fst q)",
+      "replace": "Z.compare (fst p) (fst q),\n    Z.compare (snd p) (snd q)"
+    },
+    {
+      "why": "move_to drops the moved window's span",
+      "in": "code:src/lib.rs",
+      "find": "let target = Rect::new(i, j, r.w, r.h);",
+      "replace": "let target = Rect::new(i, j, 1, 1);",
+      "check": "replay"
+    },
+    {
+      "why": "a minimum raises a span past its need",
+      "in": "code:src/lib.rs",
+      "find": "Rect::new(w.rect.i, w.rect.j, nw, w.rect.h)",
+      "replace": "Rect::new(w.rect.i, w.rect.j, nw + 1, w.rect.h)",
+      "check": "replay"
+    },
+    {
+      "why": "swap leaves what the neighbour lands on overlapping it",
+      "in": "code:src/lib.rs",
+      "find": "        self.push(n, dir.opposite());",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "place takes a layout with a rectangle more or fewer than the windows",
+      "in": "code:src/place.rs",
+      "find": "rects.len() == self.windows.len()",
+      "replace": "true",
+      "check": "replay"
+    },
+    {
+      "why": "place takes a layout that moves a target off its rectangle",
+      "in": "code:src/place.rs",
+      "find": "Some(&(_, t)) => *r == t,",
+      "replace": "Some(_) => true,",
+      "check": "replay"
+    },
+    {
+      "why": "place takes a layout that changes a span",
+      "in": "code:src/place.rs",
+      "find": "None => (r.w, r.h) == (w.rect.w, w.rect.h),",
+      "replace": "None => true,",
+      "check": "replay"
+    },
+    {
+      "why": "place takes overlapping rectangles",
+      "in": "code:src/place.rs",
+      "find": "&& disjoint(rects)",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "place takes a layout that splits an island",
+      "in": "code:src/place.rs",
+      "find": "&& !splits(&self.windows, &after, &movers)",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "restore takes an overlapping snapshot",
+      "in": "code:src/lib.rs",
+      "find": "|| !place::disjoint(&rects)",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "restore takes an empty span",
+      "in": "code:src/lib.rs",
+      "find": "rects.iter().any(|r| r.w < 1 || r.h < 1) || ",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "restore leaves the minimums the snapshot had",
+      "in": "code:src/lib.rs",
+      "find": "        self.windows = next;\n        self.enforce_all();",
+      "replace": "        self.windows = next;",
+      "check": "replay"
+    },
+    {
+      "why": "close keeps a fill that splits an island",
+      "in": "code:src/lib.rs",
+      "find": "        if splits(&before, &self.windows, &[id]) {\n            self.windows = open;\n        }\n        self.gather(&group);",
+      "replace": "        self.gather(&group);",
+      "check": "replay"
+    },
+    {
+      "why": "a minimum's growth skips the placement rules and pushes, as before the rules applied to it",
+      "in": "code:src/lib.rs",
+      "find": "if self.place(&[(id, target)], Some(dir), Some(seed)) {",
+      "replace": "if seed.is_empty() && self.place(&[(id, target)], Some(dir), None) {",
+      "check": "replay"
+    },
+    {
+      "why": "the box query forgets one column of the widening",
+      "in": "code:src/index.rs",
+      "find": "q.i - self.wide + 1,",
+      "replace": "q.i - self.wide + 2,",
+      "check": "replay"
+    },
+    {
+      "why": "a bin's corners on the query's last row are dropped",
+      "in": "code:src/index.rs",
+      "find": "take_while(|p| p.0 <= y2)",
+      "replace": "take_while(|p| p.0 < y2)",
+      "check": "replay"
+    },
+    {
+      "why": "overlapping keeps every corner in the widened box",
+      "in": "code:src/index.rs",
+      "find": "        out.retain(|&k| self.rects[k].overlaps(q));\n",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "touching asks the rectangle itself, not its ring",
+      "in": "code:src/index.rs",
+      "find": "Rect::new(a.i - 1, a.j - 1, a.w + 2, a.h + 2)",
+      "replace": "Rect::new(a.i, a.j, a.w, a.h)",
+      "check": "replay"
+    },
+    {
+      "why": "the flood skips neighbours before the window it pops",
+      "in": "code:src/index.rs",
+      "find": "                if part[b] == usize::MAX {",
+      "replace": "                if part[b] == usize::MAX && b > a {",
+      "check": "replay"
+    },
+    {
+      "why": "the tile term forgets what earlier moved windows hold",
+      "in": "code:src/place.rs",
+      "find": "- 2 * shared_area(o, n) - held)",
+      "replace": "- 2 * shared_area(o, n))",
+      "check": "replay"
+    },
+    {
+      "why": "the room is one tile short on the left",
+      "in": "code:src/place.rs",
+      "find": "        let room = Rect::new(\n            o.i - reach_x,\n",
+      "replace": "        let room = Rect::new(\n            o.i - reach_x + 1,\n",
+      "check": "replay"
+    },
+    {
+      "why": "a completed layout never splits an island",
+      "in": "code:src/place.rs",
+      "find": "must.iter().any(|l| l.iter().any(|r| !touched.contains(r)))",
+      "replace": "false",
+      "check": "replay"
+    },
+    {
+      "why": "split_by never finds an island on two",
+      "in": "code:src/place.rs",
+      "find": "*first.entry(lb).or_insert(la) != la",
+      "replace": "false",
+      "check": "replay"
+    },
+    {
+      "why": "a child's tile term forgets what moved windows hold",
+      "in": "code:src/place.rs",
+      "find": "- 2 * shared_area(&o, &c) - held;",
+      "replace": "- 2 * shared_area(&o, &c);",
+      "check": "replay"
+    },
+    {
+      "why": "the difference array loses a corner",
+      "in": "code:src/place.rs",
+      "find": "            grid[b * (gh + 1) + d][slot] += v;\n",
+      "replace": "",
+      "check": "replay"
+    },
+    {
+      "why": "a placed window no longer counts as on the windows under it",
+      "in": "code:src/place.rs",
+      "find": "            self.cover[p] += 1;\n",
+      "replace": "",
+      "check": "replay"
+    }
+  ],
+  "uncovered": [
+    "Floating point: tile size, need, fits (fits_at_1to1 at zoom 0, fits_on_screen at the current zoom), open_span, least and is_visible are modeled over exact integers in 1/10000 px with need and EPS as parameters (need >= 1, EPS >= 0); f64 rounding is not modeled. Config::default's 0.8 step is exact in that unit for zoom -2..4; above 4 the model's tile is 0, and no example zooms there.",
+    "i32 tile coordinates and i64 physical pixels are modeled over Z: overflow is out of the model.",
+    "Which window receives focus through focus_dir, focus_view_center, or neighbour as the swap partner is a free choice in the model; every claim holds for any choice. After a close it is the head of recent (C31); nearest is reached only when no window is left.",
+    "scroll_by and set_view move the view without showing the focus; C10 excludes them (a pan is followed by focus_view_center).",
+    "C10 still states its rename case under focus_known (the focus is a window), as before; C17 and C30 now prove it on every trace (recency_held), so it no longer needs check().",
+    "The view rescale in zoom_by (centred_view, about the middle of the screen) is modeled with floored integer division in 1/10000 px: C38 keeps the middle to within that unit, and C39's round trip needs the rescale to land on it, which f64 rounding does not model; C22 and C40 bind exact cases, and C36 and C11 hold from any rescaled view. Coming closer and pulling back again returns only when coming closer does not scroll; when it scrolls by s, the view ends s * t0 / t1 off (tests/replay.rs a_zoom_keeps_the_middle_of_the_screen shows one).",
+    "chain's queue is modeled with n+1 pops, enough when ids are unique (C17 keeps them unique); its content is used only by C07 and C08, as the code's own condition.",
+    "Floating windows, rendering, animation and input.",
+    "That recent lists ids in the order they were last focused is read from set_focus (retain, then insert at 0) and replayed by C34; the claims state that it is a permutation with the focus first (C30) and what a close picks (C31).",
+    "spot is modeled exactly (gap with the corner rule, least scroll at the current zoom, side, distance, i then j, strict improvement). Rust's loop over d is unbounded; the model stops after far + 2 rounds and falls back to the spot right of the focus past every right edge, which is free and has gap at most far + 1, so the search finds a spot by then; that the fallback is never taken is argued here, not proven.",
+    "need is a parameter of the config, not computed from base_tile in the model; C21, C22 and C37 bind Config::default's and CONFIGS[3]'s need at their 1:1 tiles. The model's tile at zoom 0 is base_tile because scale() is 1 there.",
+    "The niri glue draws the zoom through a camera about the canvas origin and makes the view follow its animated scale so each frame keeps the middle (src/layout/canvas.rs view_point_with); that is outside the model and checked by src/layout/tests/canvas.rs canvas_zoom_animates_about_the_middle_of_the_screen.",
+    "Which free spot add_at picks when at's is taken, beyond C46's replayed sequences: the claims state that it is free (C45), at the open span (C44), and that nothing moves (C43), not that no earlier spot in spot_near's ring order is free.",
+    "The glue in src/layout/canvas/moves.rs is bound by anchor and hash only: the model does not run it, and this gate's checks cannot build the niri crate. Its tests run with the niri crate's tests: src/layout/tests/canvas.rs canvas_drag_keeps_the_span, canvas_drop_on_its_own_tiles_changes_nothing, canvas_window_keeps_its_span_on_another_workspace, and check_spans_kept after every operation of canvas_random_operations, which exempts only the explicit resizes and swap.",
+    "A drag that leaves the window's workspace (another output, or another workspace in the overview) still takes the tile off its canvas at that moment, so its lake closes then, not at the drop; the span it carries is kept (C48).",
+    "A tile keeps carrying its span through a floating spell, so a window tiled again reopens at the span it last held on a canvas.",
+    "Where a swap leaves the two windows: the replay harness checks after every random swap that both land exactly on Canvas::swapped's rectangles, and the fixed test checks a swap and its way back; the model proves only that both keep their spans (C47) and that nothing overlaps (C01), not that the second push leaves the focus where the first put it.",
+    "Rule 1 (the least cost: tiles reassigned, distance and diagonal weights) and rule 3 (a diagonal move charged) are the engine's cost; the model takes the engine's layout as a free choice and proves what place checks (C50), while tests/rules.rs's exact search checks optimality.",
+    "gather's moves are a free choice that the model keeps only under gather's check (spans kept, no overlap); its own loop already breaks at the first window in its way, so no mutant of that check is declared.",
+    "Undo and redo history (the stacks, HISTORY, forget_history on add, add_at, remove and rename) is not modeled: Restore takes any snapshot, and the claims hold for every one.",
+    "The validation mutants of place and restore are killed by direct tests (place_accepts_only_layouts_that_keep_the_rules, restore_refuses_a_partial_overlapping_or_empty_snapshot): the engine itself never returns a layout they would refuse.",
+    "Complexity is argued and measured, not proven: a range-tree query visits at most one node per level that straddles each end of the column range (O(log² n + k)), the cost's tile term is O(m²) shared areas for m moved windows, and the leaf's flood is O(n log² n). newm-canvas/tests/bench.rs measures it: at 119x113 tiles with 64 windows a seeded run takes about 0.1 s instead of 4.8 s.",
+    "Search::run's control flow (the candidate order, pruning against the best, the budget) is not modeled: arrange stays a free choice that place checks (C50). The claims show that every value it reads from the new structures is the value the scan computed: conflicts and the windows under a candidate come from the tree over the layout before, where a window not yet placed still lies (an invariant of run, read from the code), C53; the blocked, clear and pending candidates from the candidate grid, C64-C69; kept tiles, C56; the leaf's island check, C61; the tile term per moved window, C62. place::tests::arrange_decides_what_the_scan_decided compares every placement against place::reference (the old search, kept under cfg(test)), and tests/bench.rs's layout digests match the old code's.",
+    "Node::corners reads a whole bin with std's partition_point (modeled as dropWhile on its sorted rows, equal on a sorted list) and the sorts are std's sort_unstable (modeled by Stdlib's mergesort: only the permutation and, for the rows, the order are used). The corners' sort by column only shapes the tree: correctness holds for any order.",
+    "The HashMaps of islands, split_by and the search's island numbering are modeled as association lists, which agree with them for unique ids; C17 keeps ids unique on every trace.",
+    "Floating point in the search's cost: the tally keeps tiles, area x distance and diagonal area as integers and its total is tiles + dw * spread + gw * bent. For the shipped weights (0.5, 1.0) every term is exact, so the total is the old one bit for bit; for others it can differ from the old sum in the last place, below the search's 1e-9 tie tolerance. The differential test runs with 0.3 and 0.7 too.",
+    "The search's own bookkeeping (cover counts and conflict bits as windows are placed and taken back, the moved list, the child loop that counts each child against the budget before bounding it, the per-depth candidate lists) is read from the code, not modeled; the differential test and the bench digests check it against place::reference.",
+    "gather_islands with fewer than two islands returns false and changes nothing (tests/replay.rs one_island_is_left_as_it_is); the model applies gather's answer g and shows the focus whatever the island count, so it over-approximates that branch: every claim holds for any g, the refusal's included.",
+    "arrange numbers the islands with its own flood (the sides of the windows that do not move, labels, a map to numbers) and checks the push seed with sound before the search. Islands.v proves splits, is_bridge and the search's checks from islands_fast, which partitions the same windows by the same symmetric touch, but no lemma equates the two numberings, and sound, which only decides whether the seed starts as the best, has no anchor.",
+    "The search's tally at an interior node, where a placed window may still lie on one not yet placed, is not compared with the reference's cost_of: Cost.v ties the tile term to Rules.displaced only for layouts with no two windows overlapping (C62, C63, C68). place::tests::arrange_decides_what_the_scan_decided compares every complete placement.",
+    "C39 proves the round trip of a zoom out and back in; that coming closer first and pulling back returns when coming closer does not scroll is not stated (C40 shows a case that scrolls and does not return).",
+    "C17 keeps check()'s invariants on every trace except its focus-on-screen clause, which C10 proves per step.",
+    "spot's tie on the scroll: the model compares k0 <= b0 + eps where lib.rs has key.0 < b.0 + EPS. With the model's eps = 0 on its 1/10000 px grid they agree with lib.rs's EPS of 1e-6 px; no env with eps > 0 is instantiated."
+  ],
+  "budget": {
+    "lines": 5147
+  }
+}

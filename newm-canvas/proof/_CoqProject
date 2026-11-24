@@ -1,0 +1,12 @@
+-Q . NewmCanvas
+Canvas.v
+Push.v
+Claims.v
+Spans.v
+Order.v
+Findings.v
+Rules.v
+Index.v
+Islands.v
+Cost.v
+Grid.v
