@@ -51,9 +51,8 @@ use smithay::reexports::rustix::fs::{
     fcntl_add_seals, ftruncate, memfd_create, MemfdFlags, SealFlags,
 };
 use smithay::utils::{DeviceFd, Logical, Physical, Point, Scale, Size, Transform};
-use zbus::object_server::SignalEmitter;
 
-use crate::dbus::mutter_screen_cast::{self, CursorMode};
+use crate::dbus::mutter_screen_cast::CursorMode;
 use crate::niri::{CastTarget, State};
 use crate::render_helpers::{
     clear_dmabuf, encompassing_geo, render_and_download, render_and_download_with_damage,
@@ -88,6 +87,9 @@ pub struct PipeWire {
     to_niri: calloop::channel::Sender<PwToNiri>,
 }
 
+/// Tells the client that asked for a cast which PipeWire node carries it.
+pub type NodeAnnouncer = Box<dyn Fn(u32) -> anyhow::Result<()>>;
+
 pub enum PwToNiri {
     StopCast { session_id: CastSessionId },
     Redraw { stream_id: CastStreamId },
@@ -103,6 +105,10 @@ pub struct Cast {
     pub stream: StreamRc,
     pub target: CastTarget,
     pub dynamic_target: bool,
+    /// Stamp each frame with the CLOCK_MONOTONIC time it was rendered at, as KWin does, rather
+    /// than leave its timestamp unknown. KPipeWire places frames by that timestamp and drops a
+    /// frame that is not later than the one before.
+    pub stamp_pts: bool,
     formats: FormatSet,
     offer_alpha: bool,
     cursor_mode: CursorMode,
@@ -410,7 +416,7 @@ impl PipeWire {
         refresh: u32,
         alpha: bool,
         mut cursor_mode: CursorMode,
-        signal_ctx: SignalEmitter<'static>,
+        announce_node: NodeAnnouncer,
     ) -> anyhow::Result<Cast> {
         let _span = tracy_client::span!("PipeWire::start_cast");
         let _span = debug_span!("start_cast", %session_id).entered();
@@ -481,22 +487,12 @@ impl PipeWire {
                                 if inner.node_id.is_none() {
                                     let id = stream.node_id();
                                     inner.node_id = Some(id);
-                                    debug!("sending signal with {id}");
+                                    debug!("announcing node {id}");
 
-                                    let _span = tracy_client::span!("sending PipeWireStreamAdded");
-                                    async_io::block_on(async {
-                                        let res =
-                                            mutter_screen_cast::Stream::pipe_wire_stream_added(
-                                                &signal_ctx,
-                                                id,
-                                            )
-                                            .await;
-
-                                        if let Err(err) = res {
-                                            warn!("error sending PipeWireStreamAdded: {err:?}");
-                                            stop_cast();
-                                        }
-                                    });
+                                    if let Err(err) = announce_node(id) {
+                                        warn!("error announcing the PipeWire node: {err:?}");
+                                        stop_cast();
+                                    }
                                 }
 
                                 inner.is_active = false;
@@ -943,6 +939,7 @@ impl PipeWire {
             _listener: listener,
             target,
             dynamic_target: false,
+            stamp_pts: false,
             formats,
             offer_alpha: alpha,
             cursor_mode,
@@ -1334,7 +1331,8 @@ impl Cast {
             drop(inner);
             match res {
                 Ok((sync_point, buf)) => {
-                    mark_buffer_as_good(pw_buffer, &mut self.sequence_counter, buf);
+                    let pts = self.stamp_pts.then(get_monotonic_time);
+                    mark_buffer_as_good(pw_buffer, &mut self.sequence_counter, buf, pts);
                     trace!("queueing buffer with seq={}", self.sequence_counter);
                     self.queue_after_sync(pw_buffer, sync_point);
                     true
@@ -1396,7 +1394,8 @@ impl Cast {
 
             match res {
                 Ok((sync_point, buf)) => {
-                    mark_buffer_as_good(pw_buffer, &mut self.sequence_counter, buf);
+                    let pts = self.stamp_pts.then(get_monotonic_time);
+                    mark_buffer_as_good(pw_buffer, &mut self.sequence_counter, buf, pts);
                     trace!("queueing clear buffer with seq={}", self.sequence_counter);
                     self.queue_after_sync(pw_buffer, sync_point);
                     true
@@ -1701,66 +1700,78 @@ fn allocate_shmbuf(size: Size<u32, Physical>) -> anyhow::Result<Shmbuf> {
 }
 
 unsafe fn return_unused_buffer(stream: &Stream, pw_buffer: NonNull<pw_buffer>) {
-    // pw_stream_return_buffer() requires too new PipeWire (1.4.0). So, mark as
-    // corrupted and queue.
-    let pw_buffer = pw_buffer.as_ptr();
-    let spa_buffer = (*pw_buffer).buffer;
-    let chunk = (*(*spa_buffer).datas).chunk;
-    // Some (older?) consumers will check for size == 0 instead of the CORRUPTED flag.
-    (*chunk).size = 0;
-    (*chunk).flags = SPA_CHUNK_FLAG_CORRUPTED as i32;
+    unsafe {
+        // pw_stream_return_buffer() requires too new PipeWire (1.4.0). So, mark as
+        // corrupted and queue.
+        let pw_buffer = pw_buffer.as_ptr();
+        let spa_buffer = (*pw_buffer).buffer;
+        let chunk = (*(*spa_buffer).datas).chunk;
+        // Some (older?) consumers will check for size == 0 instead of the CORRUPTED flag.
+        (*chunk).size = 0;
+        (*chunk).flags = SPA_CHUNK_FLAG_CORRUPTED as i32;
 
-    if let Some(header) = find_meta_header(spa_buffer) {
-        let header = header.as_ptr();
-        (*header).flags = SPA_META_HEADER_FLAG_CORRUPTED;
+        if let Some(header) = find_meta_header(spa_buffer) {
+            let header = header.as_ptr();
+            (*header).flags = SPA_META_HEADER_FLAG_CORRUPTED;
+        }
+
+        pw_stream_queue_buffer(stream.as_raw_ptr(), pw_buffer);
     }
-
-    pw_stream_queue_buffer(stream.as_raw_ptr(), pw_buffer);
 }
 
-unsafe fn mark_buffer_as_good(pw_buffer: NonNull<pw_buffer>, sequence: &mut u64, buf: SharingBuf) {
-    let pw_buffer = pw_buffer.as_ptr();
-    let spa_buffer = (*pw_buffer).buffer;
-    let chunk = (*(*spa_buffer).datas).chunk;
+unsafe fn mark_buffer_as_good(
+    pw_buffer: NonNull<pw_buffer>,
+    sequence: &mut u64,
+    buf: SharingBuf,
+    pts: Option<Duration>,
+) {
+    unsafe {
+        let pw_buffer = pw_buffer.as_ptr();
+        let spa_buffer = (*pw_buffer).buffer;
+        let chunk = (*(*spa_buffer).datas).chunk;
 
-    match buf {
-        SharingBuf::Dma => {
-            // With DMA-BUFs, consumers should ignore the size field, and producers are allowed
-            // to set it to 0.
-            //
-            // https://docs.pipewire.org/page_dma_buf.html
-            //
-            // However, OBS checks for size != 0 as a workaround for old compositor versions,
-            // so we set it to 1.
-            (*chunk).size = 1;
+        match buf {
+            SharingBuf::Dma => {
+                // With DMA-BUFs, consumers should ignore the size field, and producers are allowed
+                // to set it to 0.
+                //
+                // https://docs.pipewire.org/page_dma_buf.html
+                //
+                // However, OBS checks for size != 0 as a workaround for old compositor versions,
+                // so we set it to 1.
+                (*chunk).size = 1;
+                // Clear the corrupted flag we may have set before.
+                (*chunk).flags = SPA_CHUNK_FLAG_NONE as i32;
+            }
+            SharingBuf::Shm(layout) => {
+                (*chunk).size = layout.size;
+                (*chunk).flags = SPA_CHUNK_FLAG_NONE as i32;
+            }
+        }
+
+        *sequence = sequence.wrapping_add(1);
+        if let Some(header) = find_meta_header(spa_buffer) {
+            let header = header.as_ptr();
             // Clear the corrupted flag we may have set before.
-            (*chunk).flags = SPA_CHUNK_FLAG_NONE as i32;
-        }
-        SharingBuf::Shm(layout) => {
-            (*chunk).size = layout.size;
-            (*chunk).flags = SPA_CHUNK_FLAG_NONE as i32;
-        }
-    }
+            (*header).flags = 0;
+            (*header).seq = *sequence;
 
-    *sequence = sequence.wrapping_add(1);
-    if let Some(header) = find_meta_header(spa_buffer) {
-        let header = header.as_ptr();
-        // Clear the corrupted flag we may have set before.
-        (*header).flags = 0;
-        (*header).seq = *sequence;
-
-        // Set buffer timestamp as unknown.
-        //
-        // FIXME: we could try passing real presentation timestamps for rendered frames here.
-        // However, then we must also ensure that the time base never jumps (e.g. when switching a
-        // dynamic cast between outputs) as this would mess up the timing downstream.
-        (*header).pts = -1;
+            // Set buffer timestamp as unknown, unless the cast stamps its frames.
+            //
+            // FIXME: we could try passing real presentation timestamps for rendered frames here.
+            // However, then we must also ensure that the time base never jumps (e.g. when switching
+            // a dynamic cast between outputs) as this would mess up the timing downstream.
+            (*header).pts = pts.map_or(-1, |pts| i64::try_from(pts.as_nanos()).unwrap_or(-1));
+        }
     }
 }
 
 unsafe fn find_meta_header(buffer: *mut spa_buffer) -> Option<NonNull<spa_meta_header>> {
-    let p = spa_buffer_find_meta_data(buffer, SPA_META_Header, size_of::<spa_meta_header>()).cast();
-    NonNull::new(p)
+    unsafe {
+        let p =
+            spa_buffer_find_meta_data(buffer, SPA_META_Header, size_of::<spa_meta_header>()).cast();
+        NonNull::new(p)
+    }
 }
 
 unsafe fn add_invisible_cursor(spa_buffer: *mut spa_buffer) {

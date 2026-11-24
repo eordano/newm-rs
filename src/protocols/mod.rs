@@ -1,8 +1,12 @@
 pub mod ext_workspace;
 pub mod foreign_toplevel;
 pub mod gamma_control;
+pub mod kde_fake_input;
+#[cfg(feature = "xdp-gnome-screencast")]
+pub mod kde_screencast;
 pub mod mutter_x11_interop;
 pub mod output_management;
+pub mod output_power;
 pub mod screencopy;
 
 pub mod raw;

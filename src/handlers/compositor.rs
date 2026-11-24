@@ -14,16 +14,20 @@ use smithay::wayland::compositor::{
     SurfaceAttributes,
 };
 use smithay::wayland::dmabuf::get_dmabuf;
+use smithay::wayland::drm_syncobj::DrmSyncobjCachedState;
 use smithay::wayland::shell::xdg::ToplevelCachedState;
 use smithay::wayland::shm::{ShmHandler, ShmState};
 
 use super::xdg_shell::add_mapped_toplevel_pre_commit_hook;
 use crate::handlers::XDG_ACTIVATION_TOKEN_TIMEOUT;
-use crate::layout::{ActivateWindow, AddWindowTarget, LayoutElement as _};
+use crate::layout::{AddWindowTarget, LayoutElement as _};
 use crate::niri::{CastTarget, ClientState, LockState, State};
 use crate::utils::transaction::Transaction;
 use crate::utils::{is_mapped, send_scale_transform};
-use crate::window::{InitialConfigureState, Mapped, ResolvedWindowRules, Unmapped};
+use crate::window::{
+    open_output_size, overlay_position, InitialConfigureState, Mapped, ResolvedWindowRules,
+    Unmapped,
+};
 
 impl CompositorHandler for State {
     fn compositor_state(&mut self) -> &mut CompositorState {
@@ -91,7 +95,7 @@ impl CompositorHandler for State {
                     let toplevel = window.toplevel().expect("no X11 support");
 
                     let (
-                        rules,
+                        mut rules,
                         width,
                         height,
                         is_full_width,
@@ -147,33 +151,38 @@ impl CompositorHandler for State {
                     // The GTK about dialog sets min/max size after the initial configure but
                     // before mapping, so we need to compute open_floating at the last possible
                     // moment, that is here.
-                    let is_floating = rules.compute_open_floating(toplevel);
+                    let open_output = output
+                        .as_ref()
+                        .or_else(|| self.niri.layout.active_output())
+                        .map(open_output_size);
+                    let is_floating = rules.compute_open_floating(toplevel, open_output);
+                    let is_overlay = rules.opens_as_overlay(toplevel, open_output);
+                    #[cfg(feature = "canvas")]
+                    let float_line = crate::layout::canvas::usage::float_line(
+                        toplevel,
+                        rules.open_min_max(toplevel),
+                        (is_floating, is_overlay),
+                        rules.open_floating.is_some(),
+                        open_output,
+                    );
 
-                    // Figure out if we should activate the window.
-                    let activate = rules.open_focused.map(|focus| {
-                        if focus {
-                            ActivateWindow::Yes
-                        } else {
-                            ActivateWindow::No
-                        }
+                    // Check the token timestamp again in case the window took a while between
+                    // requesting activation and mapping.
+                    let has_token = activation_token_data.is_some_and(|token| {
+                        token.timestamp.elapsed() < XDG_ACTIVATION_TOKEN_TIMEOUT
                     });
-                    let activate = activate.unwrap_or_else(|| {
-                        // Check the token timestamp again in case the window took a while between
-                        // requesting activation and mapping.
-                        let token = activation_token_data.filter(|token| {
-                            token.timestamp.elapsed() < XDG_ACTIVATION_TOKEN_TIMEOUT
-                        });
-                        if token.is_some() {
-                            ActivateWindow::Yes
-                        } else {
-                            let config = self.niri.config.borrow();
-                            if config.debug.strict_new_window_focus_policy {
-                                ActivateWindow::No
-                            } else {
-                                ActivateWindow::Smart
-                            }
+                    let activate = {
+                        let config = self.niri.config.borrow();
+                        if is_overlay && rules.default_floating_position.is_none() {
+                            rules.default_floating_position =
+                                Some(overlay_position(config.layout.gaps));
                         }
-                    });
+                        rules.open_activation(
+                            has_token,
+                            is_overlay,
+                            config.debug.strict_new_window_focus_policy,
+                        )
+                    };
 
                     let parent = toplevel
                         .parent()
@@ -199,6 +208,11 @@ impl CompositorHandler for State {
                         Mapped::new(window, rules, hook, &config)
                     };
                     let window = mapped.window.clone();
+                    #[cfg(feature = "canvas")]
+                    crate::layout::canvas::usage::log_float(
+                        float_line,
+                        mapped.credentials().map(|c| c.pid),
+                    );
 
                     let target = if let Some(p) = &parent {
                         // Open dialogs next to their parent window.
@@ -532,7 +546,15 @@ impl State {
         }
 
         let hook = add_pre_commit_hook::<Self, _>(surface, move |state, _dh, surface| {
+            let mut acquire_point = None;
             let maybe_dmabuf = with_states(surface, |surface_data| {
+                acquire_point.clone_from(
+                    &surface_data
+                        .cached_state
+                        .get::<DrmSyncobjCachedState>()
+                        .pending()
+                        .acquire_point,
+                );
                 surface_data
                     .cached_state
                     .get::<SurfaceAttributes>()
@@ -545,6 +567,30 @@ impl State {
                     })
             });
             if let Some(dmabuf) = maybe_dmabuf {
+                // With explicit sync the client's acquire point, not the buffer's implicit fence,
+                // says when the buffer is ready (smithay's anvil does the same).
+                if let Some(acquire_point) = acquire_point {
+                    if let Ok((blocker, source)) = acquire_point.generate_blocker() {
+                        if let Some(client) = surface.client() {
+                            let res =
+                                state
+                                    .niri
+                                    .event_loop
+                                    .insert_source(source, move |_, _, state| {
+                                        let display_handle = state.niri.display_handle.clone();
+                                        state
+                                            .client_compositor_state(&client)
+                                            .blocker_cleared(state, &display_handle);
+                                        Ok(())
+                                    });
+                            if res.is_ok() {
+                                add_blocker(surface, blocker);
+                                trace!("added syncobj acquire-point blocker");
+                                return;
+                            }
+                        }
+                    }
+                }
                 if let Ok((blocker, source)) = dmabuf.generate_blocker(Interest::READ) {
                     if let Some(client) = surface.client() {
                         let res =
@@ -575,10 +621,13 @@ impl State {
     }
 
     pub fn remove_default_dmabuf_pre_commit_hook(&mut self, surface: &WlSurface) {
-        if let Some(hook) = self.niri.dmabuf_pre_commit_hook.remove(surface) {
-            remove_pre_commit_hook(surface, &hook);
-        } else {
-            error!("tried to remove dmabuf pre-commit hook but there was none");
+        match self.niri.dmabuf_pre_commit_hook.remove(surface) {
+            Some(hook) => {
+                remove_pre_commit_hook(surface, &hook);
+            }
+            _ => {
+                error!("tried to remove dmabuf pre-commit hook but there was none");
+            }
         }
     }
 }

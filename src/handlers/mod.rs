@@ -3,6 +3,7 @@ mod compositor;
 pub mod image_copy_capture;
 mod layer_shell;
 pub mod virtual_keyboard;
+mod xdg_dialog;
 mod xdg_shell;
 
 use std::fs::File;
@@ -32,6 +33,7 @@ use smithay::wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportN
 use smithay::wayland::drm_lease::{
     DrmLease, DrmLeaseBuilder, DrmLeaseHandler, DrmLeaseRequest, DrmLeaseState, LeaseRejected,
 };
+use smithay::wayland::drm_syncobj::{DrmSyncobjHandler, DrmSyncobjState};
 use smithay::wayland::fractional_scale::FractionalScaleHandler;
 use smithay::wayland::idle_inhibit::IdleInhibitHandler;
 use smithay::wayland::idle_notify::{IdleNotifierHandler, IdleNotifierState};
@@ -67,6 +69,8 @@ use smithay::wayland::virtual_pointer::{VirtualPointerBackend, VirtualPointerHan
 use smithay::wayland::xdg_activation::{
     XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData,
 };
+use smithay::wayland::xdg_system_bell::XdgSystemBellHandler;
+use smithay::wayland::xdg_toplevel_tag::XdgToplevelTagHandler;
 
 pub use crate::handlers::xdg_shell::KdeDecorationsModeState;
 use crate::input::click_grab::ClickGrab;
@@ -80,6 +84,7 @@ use crate::protocols::foreign_toplevel::{
 use crate::protocols::gamma_control::{GammaControlHandler, GammaControlManagerState};
 use crate::protocols::mutter_x11_interop::MutterX11InteropHandler;
 use crate::protocols::output_management::{OutputManagementHandler, OutputManagementManagerState};
+use crate::protocols::output_power::{OutputPowerHandler, OutputPowerManagerState};
 use crate::protocols::screencopy::{Screencopy, ScreencopyHandler, ScreencopyManagerState};
 use crate::utils::{output_size, send_scale_transform};
 
@@ -589,6 +594,11 @@ impl ExtWorkspaceHandler for State {
     }
 
     fn activate_workspace(&mut self, id: WorkspaceId) {
+        // With one workspace per output there is no other workspace to switch to.
+        if self.niri.layout.one_workspace() {
+            return;
+        }
+
         let reference = niri_config::WorkspaceReference::Id(id.get());
         if let Some((mut output, index)) = self.niri.find_output_and_workspace_index(reference) {
             if let Some(active) = self.niri.layout.active_output() {
@@ -653,6 +663,12 @@ impl VirtualPointerHandler for State {
     }
 }
 
+impl DrmSyncobjHandler for State {
+    fn drm_syncobj_state(&mut self) -> Option<&mut DrmSyncobjState> {
+        self.niri.drm_syncobj_state.as_mut()
+    }
+}
+
 impl DrmLeaseHandler for State {
     fn drm_lease_state(&mut self, node: DrmNode) -> &mut DrmLeaseState {
         self.backend
@@ -696,6 +712,46 @@ impl DrmLeaseHandler for State {
             .get_device_from_node(node)
             .unwrap()
             .remove_lease(lease_id);
+    }
+}
+
+// KDE apps tag their toplevels, and kwindowsystem 6.31 crashes when the global is missing. The
+// tags themselves are not used.
+impl XdgToplevelTagHandler for State {}
+
+// xdg-system-bell-v1 (GTK 4's gdk_surface_beep, Ghostty's bell): a bell on a window that is not
+// focused makes it urgent, as an xdg-activation the compositor does not honour does; a focused
+// window's bell or one without a surface changes nothing.
+impl XdgSystemBellHandler for State {
+    fn ring(&mut self, surface: Option<WlSurface>) {
+        let Some(mut root) = surface else {
+            return;
+        };
+        while let Some(parent) = smithay::wayland::compositor::get_parent(&root) {
+            root = parent;
+        }
+        if let Some((mapped, _)) = self.niri.layout.find_window_and_output_mut(&root) {
+            mapped.set_urgent(true);
+            self.niri.queue_redraw_all();
+        }
+    }
+}
+
+impl OutputPowerHandler for State {
+    fn output_power_manager_state(&mut self) -> &mut OutputPowerManagerState {
+        &mut self.niri.output_power_manager_state
+    }
+
+    fn output_power_on(&mut self, _output: &Output) -> bool {
+        self.niri.monitors_active
+    }
+
+    fn set_output_power(&mut self, _output: &Output, on: bool) {
+        if on {
+            self.niri.activate_monitors(&mut self.backend);
+        } else {
+            self.niri.deactivate_monitors(&mut self.backend);
+        }
     }
 }
 

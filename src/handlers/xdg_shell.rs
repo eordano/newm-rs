@@ -45,7 +45,9 @@ use crate::utils::transaction::Transaction;
 use crate::utils::{
     get_monotonic_time, output_matches_name, send_scale_transform, update_tiled_state, ResizeEdge,
 };
-use crate::window::{InitialConfigureState, ResolvedWindowRules, Unmapped, WindowRef};
+use crate::window::{
+    open_output_size, InitialConfigureState, ResolvedWindowRules, Unmapped, WindowRef,
+};
 
 impl XdgShellHandler for State {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -639,7 +641,8 @@ impl XdgShellHandler for State {
                             state.states.unset(xdg_toplevel::State::Maximized);
                         });
 
-                        let is_floating = rules.compute_open_floating(&toplevel);
+                        let open_output = mon.map(|mon| open_output_size(mon.output()));
+                        let is_floating = rules.compute_open_floating(&toplevel, open_output);
                         let configure_width = if is_floating {
                             *floating_width
                         } else if *is_full_width {
@@ -849,7 +852,8 @@ impl XdgShellHandler for State {
                             }
                         });
 
-                        let is_floating = rules.compute_open_floating(&toplevel);
+                        let open_output = mon.map(|mon| open_output_size(mon.output()));
+                        let is_floating = rules.compute_open_floating(&toplevel, open_output);
                         let configure_width = if is_floating {
                             *floating_width
                         } else if *is_full_width {
@@ -922,9 +926,17 @@ impl XdgShellHandler for State {
 
         let active_window = self.niri.layout.focus().map(|m| &m.window);
         let was_active = active_window == Some(&window);
+        // A modal dialog that had the focus gives it back to its parent.
+        let dialog_parent = was_active
+            .then(|| super::xdg_dialog::is_modal(&surface).then(|| surface.parent()))
+            .flatten()
+            .flatten();
 
         self.niri.window_mru_ui.remove_window(id);
         self.niri.layout.remove_window(&window, transaction.clone());
+        if let Some(parent) = dialog_parent {
+            self.focus_dialog_parent(&parent);
+        }
 
         let surface = surface.wl_surface();
         // This check is necessary because implicit resource destruction is done with
@@ -963,6 +975,19 @@ impl XdgShellHandler for State {
 
     fn title_changed(&mut self, toplevel: ToplevelSurface) {
         self.update_window_rules(&toplevel);
+        #[cfg(feature = "canvas")]
+        if let Some((mapped, output)) = self
+            .niri
+            .layout
+            .find_window_and_output(toplevel.wl_surface())
+        {
+            let window = mapped.window.clone();
+            let output = output.cloned();
+            self.niri.layout.canvas_retitled(&window);
+            if let Some(output) = output {
+                self.niri.queue_redraw(&output);
+            }
+        }
     }
 
     fn parent_changed(&mut self, toplevel: ToplevelSurface) {
@@ -1168,7 +1193,8 @@ impl State {
         let mut height = None;
         let mut floating_height = None;
         let is_full_width = rules.open_maximized.unwrap_or(false);
-        let is_floating = rules.compute_open_floating(toplevel);
+        let open_output = mon.map(|mon| open_output_size(mon.output()));
+        let is_floating = rules.compute_open_floating(toplevel, open_output);
 
         // Tell the surface the preferred size and bounds for its likely output.
         let ws = rules

@@ -3,27 +3,36 @@ use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::time::Duration;
 
-use anyhow::Context as _;
+use anyhow::{ensure, Context as _};
 use calloop::LoopHandle;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::gbm::GbmDevice;
-use smithay::backend::renderer::element::utils::{Relocate, RelocateRenderElement};
+use smithay::backend::renderer::element::utils::{
+    CropRenderElement, Relocate, RelocateRenderElement, RescaleRenderElement,
+};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::desktop::Window;
 use smithay::output::Output;
 use smithay::reexports::gbm::Modifier;
-use smithay::utils::{DeviceFd, Physical, Point, Scale, Size};
+use smithay::reexports::wayland_server::{Client, DisplayHandle};
+use smithay::utils::{DeviceFd, Logical, Physical, Point, Rectangle, Scale, Size};
 use zbus::object_server::SignalEmitter;
 
+use crate::dbus::kde_kwin::parse_window_id;
 use crate::dbus::mutter_screen_cast::{self, CursorMode, ScreenCastToNiri, StreamTargetId};
-use crate::niri::{CastTarget, Niri, OutputRenderElements, PointerRenderElements, State};
+use crate::niri::{
+    scale_relocate_crop, CastTarget, Niri, OutputRenderElements, PointerRenderElements, State,
+};
 use crate::niri_render_elements;
+use crate::protocols::kde_screencast::{
+    KdeCastSource, KdePointer, KdeScreencastHandler, KdeScreencastManagerState,
+};
 use crate::render_helpers::{RenderCtx, RenderTarget};
 use crate::utils::{get_monotonic_time, CastSessionId, CastStreamId};
 use crate::window::mapped::{MappedId, WindowCastRenderElements};
 
 mod pw_utils;
-use pw_utils::{Cast, CastSizeChange, CursorData, PipeWire, PwToNiri};
+use pw_utils::{Cast, CastSizeChange, CursorData, NodeAnnouncer, PipeWire, PwToNiri};
 
 pub struct Screencasting {
     pub casts: Vec<Cast>,
@@ -39,6 +48,9 @@ pub struct Screencasting {
     /// Window ID for the "dynamic cast" special window for the xdp-gnome picker.
     pub dynamic_cast_id_for_portal: MappedId,
 
+    /// Streams asked for over zkde_screencast_unstable_v1, the way Spectacle records.
+    pub kde: KdeScreencastManagerState,
+
     // Drop PipeWire last, and specifically after casts, to prevent a double-free (yay).
     pub pipewire: Option<PipeWire>,
 }
@@ -52,7 +64,14 @@ pub struct PendingCast {
 }
 
 impl Screencasting {
-    pub fn new(event_loop: &LoopHandle<'static, State>) -> Self {
+    pub fn new<F>(
+        event_loop: &LoopHandle<'static, State>,
+        display: &DisplayHandle,
+        filter: F,
+    ) -> Self
+    where
+        F: for<'c> Fn(&'c Client) -> bool + Send + Sync + 'static,
+    {
         let pw_to_niri = {
             let (pw_to_niri, from_pipewire) = calloop::channel::channel();
             event_loop
@@ -70,6 +89,7 @@ impl Screencasting {
             pw_to_niri,
             mapped_cast_output: HashMap::new(),
             dynamic_cast_id_for_portal: MappedId::next(),
+            kde: KdeScreencastManagerState::new::<State, _>(display, filter),
             pipewire: None,
         }
     }
@@ -161,6 +181,13 @@ impl State {
             }
             CastTarget::Output { output, .. } => {
                 if let Some(output) = output.upgrade() {
+                    self.niri.queue_redraw(&output);
+                }
+                return;
+            }
+            CastTarget::Region { rect, .. } => {
+                let rect = *rect;
+                for output in self.niri.region_cast_outputs(rect) {
                     self.niri.queue_redraw(&output);
                 }
                 return;
@@ -280,6 +307,7 @@ impl State {
                     }
                 }
             }
+            CastTarget::Region { .. } => (),
         }
 
         let mut to_redraw = Vec::new();
@@ -335,6 +363,7 @@ impl State {
                 };
                 (size, refresh)
             }
+            CastTarget::Region { .. } => return,
         };
 
         let gbm = match self.prepare_pw_cast() {
@@ -368,7 +397,7 @@ impl State {
                 refresh,
                 alpha,
                 pending.cursor_mode,
-                pending.signal_ctx,
+                announce_to_mutter(pending.signal_ctx),
             );
             match res {
                 Ok(mut cast) => {
@@ -453,7 +482,7 @@ impl State {
                     refresh,
                     alpha,
                     cursor_mode,
-                    signal_ctx,
+                    announce_to_mutter(signal_ctx),
                 );
                 match res {
                     Ok(cast) => {
@@ -704,16 +733,10 @@ impl Niri {
             .pending_dynamic_casts
             .retain(|p| p.session_id != session_id);
 
-        for i in (0..self.casting.casts.len()).rev() {
-            let cast = &self.casting.casts[i];
-            if cast.session_id != session_id {
-                continue;
-            }
-
-            let cast = self.casting.casts.swap_remove(i);
-            if let Err(err) = cast.stream.disconnect() {
-                warn!("error disconnecting stream: {err:?}");
-            }
+        let had_node = self.disconnect_casts(session_id);
+        let failure = (!had_node).then_some("the screencast stopped before it started");
+        if self.casting.kde.end(session_id, failure) {
+            return;
         }
 
         let dbus = &self.dbus.as_ref().unwrap();
@@ -729,6 +752,24 @@ impl Niri {
                     .await
             });
         }
+    }
+
+    /// Disconnects the session's streams and says whether any of them had announced its node.
+    fn disconnect_casts(&mut self, session_id: CastSessionId) -> bool {
+        let mut had_node = false;
+        for i in (0..self.casting.casts.len()).rev() {
+            let cast = &self.casting.casts[i];
+            if cast.session_id != session_id {
+                continue;
+            }
+
+            let cast = self.casting.casts.swap_remove(i);
+            had_node |= cast.node_id().is_some();
+            if let Err(err) = cast.stream.disconnect() {
+                warn!("error disconnecting stream: {err:?}");
+            }
+        }
+        had_node
     }
 
     pub fn stop_casts_for_target(&mut self, target: CastTarget) {
@@ -774,6 +815,263 @@ impl Niri {
     }
 }
 
+impl Niri {
+    pub fn region_cast_outputs(&self, rect: Rectangle<i32, Logical>) -> Vec<Output> {
+        self.global_space
+            .outputs()
+            .filter(|output| {
+                self.global_space
+                    .output_geometry(output)
+                    .is_some_and(|geo| geo.overlaps(rect))
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Buffer size, scale and refresh of a region cast, or `None` while no output shows the
+    /// region.
+    fn cast_params_for_region(
+        &self,
+        rect: Rectangle<i32, Logical>,
+        scale: Option<f64>,
+    ) -> Option<(Size<i32, Physical>, f64, u32)> {
+        let outputs = self.region_cast_outputs(rect);
+        let max_scale = outputs
+            .iter()
+            .map(|output| output.current_scale().fractional_scale())
+            .max_by(f64::total_cmp)?;
+        let refresh = outputs
+            .iter()
+            .map(|output| output.current_mode().unwrap().refresh as u32)
+            .max()?;
+        let scale = scale.unwrap_or(max_scale);
+        let size = rect.size.to_f64().to_physical(scale).to_i32_round::<i32>();
+        let size = Size::from((size.w.max(1), size.h.max(1)));
+        Some((size, scale, refresh))
+    }
+
+    /// Renders the region casts that `output` shows part of. A region spanning several outputs
+    /// gets every one of them, each scaled to the cast's scale and cut to its own rectangle.
+    pub fn render_regions_for_screen_cast(
+        &mut self,
+        renderer: &mut GlesRenderer,
+        output: &Output,
+        target_presentation_time: Duration,
+    ) {
+        let _span = tracy_client::span!("Niri::render_regions_for_screen_cast");
+
+        let Some(output_geo) = self.global_space.output_geometry(output) else {
+            return;
+        };
+
+        let mut casts_to_stop = vec![];
+
+        let mut casts = mem::take(&mut self.casting.casts);
+        for cast in &mut casts {
+            if !cast.is_active() {
+                continue;
+            }
+
+            let CastTarget::Region { rect, scale } = cast.target else {
+                continue;
+            };
+            if !output_geo.overlaps(rect) {
+                continue;
+            }
+            let Some((size, scale, _)) = self.cast_params_for_region(rect, scale) else {
+                continue;
+            };
+
+            match cast.ensure_size(size) {
+                Ok(CastSizeChange::Ready) => (),
+                Ok(CastSizeChange::Pending) => continue,
+                Err(err) => {
+                    warn!("error updating stream size, stopping screencast: {err:?}");
+                    casts_to_stop.push(cast.session_id);
+                }
+            }
+
+            if cast.check_time_and_schedule(output, target_presentation_time) {
+                continue;
+            }
+
+            let scale = Scale::from(scale);
+            let mut elements = Vec::new();
+            let mut pointer_pos = Point::default();
+
+            if self.pointer_visibility.is_visible() {
+                let pointer_loc = self
+                    .tablet_cursor_location
+                    .unwrap_or_else(|| self.seat.get_pointer().unwrap().current_location());
+                let pointer_output = self.global_space.output_under(pointer_loc).next().cloned();
+                let placed = pointer_output
+                    .filter(|_| rect.to_f64().contains(pointer_loc))
+                    .and_then(|output| {
+                        Some((self.region_placement(&output, rect, scale)?, output))
+                    });
+                if let Some(((geo, zoom), pointer_output)) = placed {
+                    pointer_pos = pointer_loc - rect.loc.to_f64();
+                    self.render_pointer(renderer, &pointer_output, &mut |elem| {
+                        let elem = OutputRenderElements::from(elem);
+                        if let Some(elem) = scale_relocate_crop(elem, scale, zoom, geo) {
+                            elements.push(CastRenderElement::from(elem));
+                        }
+                    });
+                }
+            }
+
+            let main_start = elements.len();
+            for region_output in self.region_cast_outputs(rect) {
+                let Some((geo, zoom)) = self.region_placement(&region_output, rect, scale) else {
+                    continue;
+                };
+                let ctx = RenderCtx {
+                    renderer: &mut *renderer,
+                    target: RenderTarget::Screencast,
+                    xray: None,
+                };
+                self.render(ctx, &region_output, false, &mut |elem| {
+                    if let Some(elem) = scale_relocate_crop(elem, scale, zoom, geo) {
+                        elements.push(CastRenderElement::from(elem));
+                    }
+                });
+            }
+
+            let cursor_data = CursorData::compute(&elements, main_start, pointer_pos, scale);
+
+            if cast.dequeue_buffer_and_render(renderer, &elements, &cursor_data, size, scale) {
+                cast.record_frame_time(target_presentation_time);
+            }
+        }
+        self.casting.casts = casts;
+
+        for id in casts_to_stop {
+            self.stop_cast(id);
+        }
+    }
+
+    /// Where `output` sits in a region cast's buffer, in the region's logical coordinates, and
+    /// the zoom that takes its rendering from its own scale to the cast's.
+    fn region_placement(
+        &self,
+        output: &Output,
+        rect: Rectangle<i32, Logical>,
+        scale: Scale<f64>,
+    ) -> Option<(Rectangle<f64, Logical>, f64)> {
+        let geo = self.global_space.output_geometry(output)?;
+        let geo = Rectangle::new(geo.loc - rect.loc, geo.size).to_f64();
+        let zoom = scale.x / output.current_scale().fractional_scale();
+        Some((geo, zoom))
+    }
+}
+
+impl State {
+    fn start_kde_cast_on(
+        &mut self,
+        session_id: CastSessionId,
+        source: KdeCastSource,
+        pointer: KdePointer,
+    ) -> anyhow::Result<()> {
+        let (target, size, refresh, alpha) = match source {
+            KdeCastSource::Output(output) => {
+                ensure!(
+                    self.niri.output_state.contains_key(&output),
+                    "the output is gone"
+                );
+                let (size, refresh) = cast_params_for_output(&output);
+                (CastTarget::output(&output), size, refresh, false)
+            }
+            KdeCastSource::Window(uuid) => {
+                let id = parse_window_id(&uuid);
+                let params = id.and_then(|id| Some((id, self.niri.cast_params_for_window(id)?)));
+                let (id, (size, refresh)) = params.context("no window has this id")?;
+                (CastTarget::Window { id }, size, refresh, true)
+            }
+            KdeCastSource::Region { rect, scale } => {
+                let (size, _, refresh) = self
+                    .niri
+                    .cast_params_for_region(rect, scale)
+                    .context("no output shows this region")?;
+                (CastTarget::Region { rect, scale }, size, refresh, false)
+            }
+        };
+
+        let gbm = self.prepare_pw_cast()?;
+        let stream = self
+            .niri
+            .casting
+            .kde
+            .stream(session_id)
+            .context("the client closed the stream")?;
+        let announce: NodeAnnouncer = Box::new(move |node| {
+            stream.created(node);
+            Ok(())
+        });
+
+        let pw = self.niri.casting.pipewire.as_ref().unwrap();
+        let mut cast = pw.start_cast(
+            gbm,
+            session_id,
+            CastStreamId::next(),
+            target,
+            size,
+            refresh,
+            alpha,
+            pointer.into(),
+            announce,
+        )?;
+        cast.stamp_pts = true;
+        self.niri.casting.casts.push(cast);
+        Ok(())
+    }
+}
+
+impl KdeScreencastHandler for State {
+    fn kde_screencast_state(&mut self) -> &mut KdeScreencastManagerState {
+        &mut self.niri.casting.kde
+    }
+
+    fn start_kde_cast(
+        &mut self,
+        session_id: CastSessionId,
+        source: KdeCastSource,
+        pointer: KdePointer,
+    ) {
+        let _span = debug_span!("start_kde_cast", %session_id).entered();
+
+        if let Err(err) = self.start_kde_cast_on(session_id, source, pointer) {
+            warn!("error starting a KDE screencast: {err:?}");
+            let error = format!("{err:#}");
+            self.niri.casting.kde.end(session_id, Some(&error));
+        }
+    }
+
+    fn stop_kde_cast(&mut self, session_id: CastSessionId) {
+        self.niri.disconnect_casts(session_id);
+    }
+}
+
+impl From<KdePointer> for CursorMode {
+    fn from(pointer: KdePointer) -> Self {
+        match pointer {
+            KdePointer::Hidden => CursorMode::Hidden,
+            KdePointer::Embedded => CursorMode::Embedded,
+            KdePointer::Metadata => CursorMode::Metadata,
+        }
+    }
+}
+
+fn announce_to_mutter(signal_ctx: SignalEmitter<'static>) -> NodeAnnouncer {
+    Box::new(move |node| {
+        let _span = tracy_client::span!("sending PipeWireStreamAdded");
+        async_io::block_on(mutter_screen_cast::Stream::pipe_wire_stream_added(
+            &signal_ctx,
+            node,
+        ))
+        .context("error sending PipeWireStreamAdded")
+    })
+}
+
 fn cast_params_for_output(output: &Output) -> (Size<i32, Physical>, u32) {
     let mode = output.current_mode().unwrap();
     let transform = output.current_transform();
@@ -788,5 +1086,8 @@ niri_render_elements! {
         Window = WindowCastRenderElements<R>,
         Pointer = PointerRenderElements<R>,
         RelocatedPointer = RelocateRenderElement<PointerRenderElements<R>>,
+        Region = CropRenderElement<RelocateRenderElement<RescaleRenderElement<
+            OutputRenderElements<R>
+        >>>,
     }
 }
