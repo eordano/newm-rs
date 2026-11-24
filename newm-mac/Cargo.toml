@@ -1,0 +1,20 @@
+[package]
+name = "newm-mac"
+version = "0.1.0"
+description = "newm-rs's tile canvas driving macOS windows through the Accessibility API"
+license = "GPL-3.0-or-later"
+edition = "2024"
+
+# Its own workspace: the Linux workspace, its Cargo.lock and its builds stay untouched.
+[workspace]
+
+[features]
+# Writes the usage log (~/.local/state/newm-mac/usage.jsonl) for tuning placement.
+telemetry = []
+
+[dependencies]
+newm-canvas = { path = "../newm-canvas" }
+serde_json = "1"
+
+[profile.release]
+debug = "line-tables-only"
