@@ -1,0 +1,86 @@
+--- a/src/server/mod.rs
++++ b/src/server/mod.rs
+@@ -1396,6 +1396,56 @@
+         }
+     }
+ 
++    fn is_mapped_xdg_window(&self, window: x::Window) -> bool {
++        let Some(entity) = self.windows.get(&window).copied() else {
++            return false;
++        };
++        let Ok(mut query) = self
++            .world
++            .query_one::<(&WindowData, &SurfaceRole)>(entity)
++        else {
++            return false;
++        };
++        query
++            .get()
++            .is_some_and(|(data, role)| data.mapped && role.xdg().is_some())
++    }
++
++    /// A popup's parent by X geometry. `exact` asks for a toplevel with the popup's very rect (an
++    /// overlay tracking its window, which no menu or tooltip matches); otherwise any toplevel
++    /// holding the popup's origin, one of the same size first.
++    fn toplevel_under(&self, dims: WindowDims, exact: bool) -> Option<x::Window> {
++        let mut query = self
++            .world
++            .query::<(&x::Window, &WindowData, &SurfaceRole)>();
++        let mut best: Option<(bool, x::Window)> = None;
++        for (_, (window, data, role)) in query.iter() {
++            if !data.mapped || !matches!(role, SurfaceRole::Toplevel(Some(_))) {
++                continue;
++            }
++            let p = data.attrs.dims;
++            let same_rect = p == dims;
++            if exact {
++                if same_rect {
++                    return Some(*window);
++                }
++                continue;
++            }
++            let inside = dims.x >= p.x
++                && dims.y >= p.y
++                && (dims.x as i32) < p.x as i32 + p.width as i32
++                && (dims.y as i32) < p.y as i32 + p.height as i32;
++            if !inside {
++                continue;
++            }
++            let same_size = p.width == dims.width && p.height == dims.height;
++            if best.is_none_or(|(best_same, _)| same_size && !best_same) {
++                best = Some((same_size, *window));
++            }
++        }
++        best.map(|(_, window)| window)
++    }
++
+     /// Creates the appropriate xdg role (toplevel or popup) for the given window.
+     /// Returns `true` if the created window is a toplevel.
+     fn create_role_window(&mut self, window: x::Window, entity: Entity) -> bool {
+@@ -1414,7 +1464,14 @@
+ 
+             let window_data = data.get::<&WindowData>().unwrap();
+             if window_data.attrs.role.is_popup() {
+-                popup_for = self.last_hovered.or(self.last_focused_toplevel);
++                popup_for = window_data
++                    .attrs
++                    .transient_for
++                    .filter(|parent| self.is_mapped_xdg_window(*parent))
++                    .or_else(|| self.toplevel_under(window_data.attrs.dims, true))
++                    .or(self.last_hovered)
++                    .or(self.last_focused_toplevel)
++                    .or_else(|| self.toplevel_under(window_data.attrs.dims, false));
+             }
+             splash = window_data.attrs.role == WindowRole::Splash;
+ 
+--- a/src/xstate/mod.rs
++++ b/src/xstate/mod.rs
+@@ -677,7 +677,7 @@
+             );
+         }
+         server_state.set_window_role(window, role);
+-        if let Some(parent) = transient_for.and_then(|t| (!role.is_popup()).then_some(t)) {
++        if let Some(parent) = transient_for {
+             server_state.set_transient_for(window, parent);
+         }
+ 

@@ -1,0 +1,20 @@
+Integrated mode (started by the compositor with -listenfd) logs to syslog at a fixed
+Debug level, so every X property change and configure reached the journal. Take the
+level from RUST_LOG instead (a bare level such as debug), Info when unset.
+
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -250,7 +250,12 @@
+         match syslog::unix(syslog::Formatter3164::default()) {
+             Ok(syslog) => {
+                 log::set_boxed_logger(Box::new(syslog::BasicLogger::new(syslog))).unwrap();
+-                log::set_max_level(log::LevelFilter::Debug);
++                log::set_max_level(
++                    std::env::var("RUST_LOG")
++                        .ok()
++                        .and_then(|level| level.parse().ok())
++                        .unwrap_or(log::LevelFilter::Info),
++                );
+                 std::panic::set_hook(Box::new(|info| {
+                     let thread = std::thread::current();
+                     let name = thread.name().unwrap_or("<unnamed");

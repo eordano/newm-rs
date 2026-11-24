@@ -1,0 +1,8 @@
+<!doctype html><title>probe</title>
+<body style="background:#30c030;margin:0">
+<input id="i" autofocus style="font-size:40px;margin:40px">
+<script>
+const show = () => { document.title = "dpr=" + devicePixelRatio + " typed=" + document.getElementById("i").value; };
+show();
+document.getElementById("i").addEventListener("keyup", show);
+</script>
