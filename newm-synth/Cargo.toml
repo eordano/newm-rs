@@ -1,0 +1,8 @@
+[package]
+name = "newm-synth"
+version = "0.1.0"
+description = "newm's animated background: the tuned synthwave look as knobs, shader and CPU port"
+license = "GPL-3.0-or-later"
+edition = "2024"
+
+[dependencies]
