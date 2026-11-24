@@ -7,8 +7,6 @@ A Wayland compositor with a strict 2D tile canvas: a fork of niri, inspired by n
 <p align="center">
   <a href="docs/video/out/newm-rs.mp4"><img width="960" alt="newm-rs: windows rearranging on a strict 2D tile canvas, replayed from a real session" src="docs/video/out/newm-rs-loop.webp"></a>
 </p>
-<p align="center">The canvas above is a real session, replayed; click it for the full video with narration.
-  Source: <a href="https://github.com/eordano/newm-rs">github.com/eordano/newm-rs</a></p>
 
 ## Principles
 
