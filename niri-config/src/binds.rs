@@ -16,7 +16,7 @@ use crate::input::ModKey;
 use crate::recent_windows::{MruDirection, MruFilter, MruScope};
 use crate::utils::{expect_only_children, MergeWith};
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Binds(pub Vec<Bind>);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -525,6 +525,41 @@ pub enum Action {
     UnsetWindowUrgent(u64),
     #[knuffel(skip)]
     LoadConfigFile(#[knuffel(argument)] Option<String>),
+    #[cfg(feature = "canvas")]
+    ResizeEdge(
+        #[knuffel(argument, str)] niri_ipc::CanvasEdge,
+        #[knuffel(argument)] i32,
+    ),
+    #[cfg(feature = "canvas")]
+    ZoomIn,
+    #[cfg(feature = "canvas")]
+    ZoomOut,
+    #[cfg(feature = "canvas")]
+    ZoomReset,
+    #[cfg(feature = "canvas")]
+    Undo,
+    #[cfg(feature = "canvas")]
+    Redo,
+    #[cfg(feature = "canvas")]
+    GatherIslands,
+    #[cfg(feature = "canvas")]
+    SendToEdge(#[knuffel(argument, str)] niri_ipc::CanvasSide),
+    #[cfg(feature = "canvas")]
+    SwapNeighbour(#[knuffel(argument, str)] niri_ipc::CanvasDirection),
+    #[cfg(feature = "canvas")]
+    QuitApp,
+    ToggleSynthBackground,
+    SetSynthBackground(#[knuffel(argument, str)] niri_ipc::SynthMode),
+    #[cfg(feature = "canvas")]
+    CycleFloatingFollow,
+    #[cfg(feature = "canvas")]
+    SetFloatingFollow(#[knuffel(argument, str)] niri_ipc::FloatingFollow),
+    #[cfg(feature = "canvas")]
+    #[knuffel(skip)]
+    LaunchPlaceholder {
+        app_id: String,
+        icon: Option<String>,
+    },
     #[knuffel(skip)]
     MruAdvance {
         direction: MruDirection,
@@ -894,6 +929,36 @@ impl From<niri_ipc::Action> for Action {
             niri_ipc::Action::SetWindowUrgent { id } => Self::SetWindowUrgent(id),
             niri_ipc::Action::UnsetWindowUrgent { id } => Self::UnsetWindowUrgent(id),
             niri_ipc::Action::LoadConfigFile { path } => Self::LoadConfigFile(path),
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::ResizeEdge { edge, delta } => Self::ResizeEdge(edge, delta),
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::ZoomIn {} => Self::ZoomIn,
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::ZoomOut {} => Self::ZoomOut,
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::ZoomReset {} => Self::ZoomReset,
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::Undo {} => Self::Undo,
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::Redo {} => Self::Redo,
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::GatherIslands {} => Self::GatherIslands,
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::SendToEdge { side } => Self::SendToEdge(side),
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::SwapNeighbour { direction } => Self::SwapNeighbour(direction),
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::QuitApp {} => Self::QuitApp,
+            niri_ipc::Action::ToggleSynthBackground {} => Self::ToggleSynthBackground,
+            niri_ipc::Action::SetSynthBackground { mode } => Self::SetSynthBackground(mode),
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::CycleFloatingFollow {} => Self::CycleFloatingFollow,
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::SetFloatingFollow { mode } => Self::SetFloatingFollow(mode),
+            #[cfg(feature = "canvas")]
+            niri_ipc::Action::LaunchPlaceholder { app_id, icon } => {
+                Self::LaunchPlaceholder { app_id, icon }
+            }
         }
     }
 }
@@ -934,8 +999,8 @@ impl<S: knuffel::traits::ErrorSpan> knuffel::DecodeScalar<S> for WorkspaceRefere
         ctx: &mut knuffel::decode::Context<S>,
     ) -> Result<WorkspaceReference, DecodeError<S>> {
         match &**val {
-            knuffel::ast::Literal::String(ref s) => Ok(WorkspaceReference::Name(s.clone().into())),
-            knuffel::ast::Literal::Int(ref value) => match value.try_into() {
+            knuffel::ast::Literal::String(s) => Ok(WorkspaceReference::Name(s.clone().into())),
+            knuffel::ast::Literal::Int(value) => match value.try_into() {
                 Ok(v) => Ok(WorkspaceReference::Index(v)),
                 Err(e) => {
                     ctx.emit_error(DecodeError::conversion(val, e));
@@ -1205,14 +1270,16 @@ where
             release_action = None;
         }
 
-        if let Some(node) = repeat_node {
-            if repeat == Some(true) && press_action.is_none() && release_action.is_some() {
-                ctx.emit_error(DecodeError::unexpected(
-                    node,
-                    "property",
-                    "release-only binds cannot repeat",
-                ));
-            }
+        if let Some(node) = repeat_node
+            && repeat == Some(true)
+            && press_action.is_none()
+            && release_action.is_some()
+        {
+            ctx.emit_error(DecodeError::unexpected(
+                node,
+                "property",
+                "release-only binds cannot repeat",
+            ));
         }
 
         if let Some(node) = allow_when_locked_node {

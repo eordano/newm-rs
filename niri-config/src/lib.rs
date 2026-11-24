@@ -31,15 +31,20 @@ pub mod macros;
 pub mod animations;
 pub mod appearance;
 pub mod binds;
+#[cfg(feature = "canvas")]
+pub mod canvas;
 pub mod debug;
 pub mod error;
 pub mod gestures;
 pub mod input;
 pub mod layer_rule;
 pub mod layout;
+#[cfg(feature = "canvas")]
+pub mod live;
 pub mod misc;
 pub mod output;
 pub mod recent_windows;
+pub mod synth;
 pub mod utils;
 pub mod window_rule;
 pub mod workspace;
@@ -57,6 +62,7 @@ pub use crate::misc::*;
 pub use crate::output::{Output, OutputName, Outputs, Position, Vrr};
 use crate::recent_windows::RecentWindowsPart;
 pub use crate::recent_windows::{MruDirection, MruFilter, MruPreviews, MruScope, RecentWindows};
+pub use crate::synth::{SynthBackground, SynthOnBattery, SYNTH_KNOBS};
 pub use crate::utils::FloatOrInt;
 use crate::utils::{expand_home_path, Flag, MergeWith as _};
 pub use crate::window_rule::{
@@ -66,7 +72,7 @@ pub use crate::workspace::{Workspace, WorkspaceLayoutPart};
 
 const RECURSION_LIMIT: u8 = 10;
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Config {
     pub input: Input,
     pub outputs: Outputs,
@@ -92,6 +98,7 @@ pub struct Config {
     pub debug: Debug,
     pub workspaces: Vec<Workspace>,
     pub recent_windows: RecentWindows,
+    pub synth_background: SynthBackground,
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +214,7 @@ where
                 "xwayland-satellite" => m_merge!(xwayland_satellite),
                 "switch-events" => m_merge!(switch_events),
                 "debug" => m_merge!(debug),
+                "synth-background" => m_merge!(synth_background),
 
                 // Multipart sections.
                 "output" => {
@@ -273,12 +281,12 @@ where
                     //
                     // So, let's just work around the problem here, preserving the original
                     // behavior.
-                    if recursion == 0 {
-                        if let Some(border) = part.border.as_mut() {
-                            if !border.on && !border.off {
-                                border.on = true;
-                            }
-                        }
+                    if recursion == 0
+                        && let Some(border) = part.border.as_mut()
+                        && !border.on
+                        && !border.off
+                    {
+                        border.on = true;
                     }
 
                     config.borrow_mut().layout.merge_with(&part);
@@ -1146,6 +1154,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
     fn parse() {
         let parsed = do_parse(
             r##"
@@ -3011,6 +3020,56 @@ mod tests {
                         hotkey_overlay_title: None,
                     },
                 ],
+            },
+            synth_background: SynthBackground {
+                mode: Off,
+                max_fps: None,
+                on_battery: Still,
+                on_battery_max_fps: 30.0,
+                idle_still_after: 300.0,
+                react_to_sound: false,
+                seed: None,
+                horizon: None,
+                sky_fall: None,
+                stars: None,
+                sun_size: None,
+                sun_y: None,
+                sun_x: None,
+                stripes: None,
+                stripe_width: None,
+                halo: None,
+                reflection: None,
+                layers: None,
+                ridge_height: None,
+                roughness: None,
+                ridge_frequency: None,
+                ridge_speed: None,
+                haze: None,
+                rim: None,
+                perspective: None,
+                grid_x: None,
+                grid_z: None,
+                line_width: None,
+                grid_glow: None,
+                grid_speed: None,
+                curve: None,
+                cycle_speed: None,
+                cycle_sun: None,
+                cycle_hue: None,
+                hue: None,
+                saturation: None,
+                brightness: None,
+                scanlines: None,
+                bits: None,
+                audio_sun: None,
+                audio_grid: None,
+                audio_ridge: None,
+                sky_color: None,
+                glow_color: None,
+                grid_color: None,
+                sun_top_color: None,
+                sun_bottom_color: None,
+                ridge_color: None,
             },
         }
         "#);

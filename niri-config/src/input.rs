@@ -14,7 +14,7 @@ use crate::binds::Modifiers;
 use crate::utils::{expand_home_path, Flag, MergeWith, Percent};
 use crate::{FloatOrInt, Includes};
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Input {
     pub keyboard: Keyboard,
     pub touchpad: Touchpad,
@@ -90,7 +90,7 @@ impl MergeWith<InputPart> for Input {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Keyboard {
     pub xkb: Xkb,
     pub repeat_delay: u16,

@@ -4,7 +4,7 @@ use smithay::input::keyboard::Keysym;
 use crate::utils::{expect_only_children, MergeWith};
 use crate::{Action, Bind, BoundAction, Color, FloatOrInt, Key, Modifiers, Trigger};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RecentWindows {
     pub on: bool,
     pub debounce_ms: u16,
@@ -65,7 +65,7 @@ impl MergeWith<RecentWindowsPart> for RecentWindows {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MruHighlight {
     pub active_color: Color,
     pub urgent_color: Color,
@@ -216,7 +216,7 @@ impl From<MruAction> for Action {
     }
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct MruBinds(pub Vec<MruBind>);
 
 fn default_binds() -> Vec<Bind> {

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use crate::utils::{Flag, MergeWith};
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct Debug {
     pub preview_render: Option<PreviewRender>,
     pub dbus_interfaces_in_non_session_instances: bool,

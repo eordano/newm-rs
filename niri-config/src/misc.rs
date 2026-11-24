@@ -14,7 +14,7 @@ pub struct SpawnShAtStartup {
     pub command: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Cursor {
     pub xcursor_theme: String,
     pub xcursor_size: u8,

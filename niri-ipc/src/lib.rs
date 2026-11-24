@@ -61,6 +61,14 @@ use serde::{Deserialize, Serialize};
 pub mod socket;
 pub mod state;
 
+#[cfg(feature = "canvas")]
+mod canvas;
+#[cfg(feature = "canvas")]
+pub use canvas::{
+    CanvasDirection, CanvasEdge, CanvasSide, FloatingFollow, NewmBlock, NewmBlockAnchor,
+    NewmBlockWindow, NewmOption,
+};
+
 /// Request from client to niri.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
@@ -119,6 +127,46 @@ pub enum Request {
     OverviewState,
     /// Request information about screencasts.
     Casts,
+    /// List newm's live settings: each key with its value, the config file's value and its
+    /// bounds.
+    #[cfg(feature = "canvas")]
+    NewmOptions,
+    /// Override one live setting until the compositor exits. Nothing is written to disk, and
+    /// the override stays on top of the config file when it reloads.
+    #[cfg(feature = "canvas")]
+    NewmSetOption {
+        /// The setting's key, such as `layout.canvas.zoom-step`.
+        key: String,
+        /// The new value, of the setting's kind.
+        value: serde_json::Value,
+    },
+    /// Drop the override of one live setting: the config file's value applies again.
+    #[cfg(feature = "canvas")]
+    NewmResetOption {
+        /// The setting's key.
+        key: String,
+    },
+    /// Drop every live override.
+    #[cfg(feature = "canvas")]
+    NewmResetAll,
+    /// Get the live overrides as config file nodes.
+    #[cfg(feature = "canvas")]
+    NewmExport,
+    /// Launch windows and place them on the focused canvas as one block: the block's tiles are
+    /// reserved at once, each new window takes the slot of its app ID (several of one app in
+    /// launch order), and a slot no window takes within 20 seconds is released.
+    #[cfg(feature = "canvas")]
+    NewmPlaceBlock(NewmBlock),
+    /// Request which window took each slot of a block.
+    #[cfg(feature = "canvas")]
+    NewmBlockStatus {
+        /// The block's id, from [`Response::NewmBlock`].
+        id: u64,
+    },
+    /// Move the focused canvas's tiled windows together, keeping their arrangement, to just left
+    /// of the view. The camera stays; one undo takes the move back.
+    #[cfg(feature = "canvas")]
+    NewmParkWindows,
 }
 
 /// Reply from niri to client.
@@ -165,6 +213,34 @@ pub enum Response {
     OverviewState(Overview),
     /// Information about screencasts.
     Casts(Vec<Cast>),
+    /// newm's live settings.
+    #[cfg(feature = "canvas")]
+    NewmOptions(Vec<NewmOption>),
+    /// The live overrides as config file nodes.
+    #[cfg(feature = "canvas")]
+    NewmExport {
+        /// KDL nodes for every overridden key, nested as in the config file, after a comment
+        /// line that names the build.
+        kdl: String,
+    },
+    /// A block placed: its id and the tile its origin is on.
+    #[cfg(feature = "canvas")]
+    NewmBlock {
+        /// The id [`Request::NewmBlockStatus`] takes.
+        id: u64,
+        /// The block's origin tile: column and row.
+        origin: (i32, i32),
+    },
+    /// Which window took each slot of a block.
+    #[cfg(feature = "canvas")]
+    NewmBlockStatus {
+        /// The block's id.
+        id: u64,
+        /// Per slot, the id of the window that took it, or none yet (or ever, once released).
+        windows: Vec<Option<u64>>,
+        /// Whether every slot has a window or was released.
+        done: bool,
+    },
 }
 
 /// Overview information.
@@ -1034,6 +1110,85 @@ pub enum Action {
         #[cfg_attr(feature = "clap", arg(long))]
         path: Option<String>,
     },
+    /// Move one edge of the focused tiled window by whole tiles.
+    #[cfg(feature = "canvas")]
+    ResizeEdge {
+        /// Edge to move: left, right, top or bottom.
+        edge: CanvasEdge,
+        /// Tiles to move the edge outward; negative moves it inward.
+        #[cfg_attr(feature = "clap", arg(allow_negative_numbers = true))]
+        delta: i32,
+    },
+    /// Move the canvas camera in: the canvas is drawn larger, fewer tiles fit on screen, and no
+    /// window changes its size.
+    #[cfg(feature = "canvas")]
+    ZoomIn {},
+    /// Pull the canvas camera back: the canvas is drawn smaller, more tiles fit on screen, and no
+    /// window changes its size.
+    #[cfg(feature = "canvas")]
+    ZoomOut {},
+    /// Return the canvas camera to 1:1, every window drawn at its own size, keeping the canvas
+    /// point under the middle of the screen in place as zoom-in and zoom-out do.
+    #[cfg(feature = "canvas")]
+    ZoomReset {},
+    /// Take back the last rearrangement of the canvas's windows: a move, a drop, a swap or a
+    /// resize. Undo reaches back while the same windows are open.
+    #[cfg(feature = "canvas")]
+    Undo {},
+    /// Do again the last rearrangement undone.
+    #[cfg(feature = "canvas")]
+    Redo {},
+    /// Bring the canvas's windows into one island, each sharing a side with another: every
+    /// island but the largest slides the least it must to touch it, and no window changes its
+    /// size. Undo takes it back.
+    #[cfg(feature = "canvas")]
+    GatherIslands {},
+    /// Move the focused tiled window past every other window on one side.
+    #[cfg(feature = "canvas")]
+    SendToEdge {
+        /// Side to send the window to: left or right.
+        side: CanvasSide,
+    },
+    /// Exchange the focused tiled window's tiles with those of its neighbour in a direction.
+    #[cfg(feature = "canvas")]
+    SwapNeighbour {
+        /// Direction of the neighbour: left, right, up or down.
+        direction: CanvasDirection,
+    },
+    /// Close every window of the focused app: the windows with its PID and app ID.
+    #[cfg(feature = "canvas")]
+    QuitApp {},
+    /// Start or stop the synth background's motion: from animated it goes back to the
+    /// configured mode (off or still; still when the config says animated), from anything else
+    /// to animated.
+    ToggleSynthBackground {},
+    /// Set the synth background's mode until the config changes the setting.
+    SetSynthBackground {
+        /// Mode: off (not drawn), still (one frame, no ticker) or animated.
+        mode: SynthMode,
+    },
+    /// Switch how floating windows follow the canvas camera to the next mode: screen, parent,
+    /// canvas, then screen again.
+    #[cfg(feature = "canvas")]
+    CycleFloatingFollow {},
+    /// Set how floating windows follow the canvas camera until the config changes the setting.
+    #[cfg(feature = "canvas")]
+    SetFloatingFollow {
+        /// Mode: screen (floating windows stay on screen), parent (a dialog moves with its
+        /// tiled parent) or canvas (every floating window moves with the canvas).
+        mode: FloatingFollow,
+    },
+    /// Draw a placeholder tile where the next window opens, until a window with this app ID
+    /// maps there or 10 seconds pass.
+    #[cfg(feature = "canvas")]
+    LaunchPlaceholder {
+        /// App ID of the window to wait for.
+        #[cfg_attr(feature = "clap", arg(long))]
+        app_id: String,
+        /// Path of an icon image to draw on the placeholder.
+        #[cfg_attr(feature = "clap", arg(long))]
+        icon: Option<String>,
+    },
 }
 
 /// Change in window or column size.
@@ -1857,6 +2012,9 @@ pub enum Event {
         /// disabled in hardware, or via `input { touchpad { off; } }`—this is not reflected here.
         on: bool,
     },
+    /// newm's live settings changed: an override was set or reset, or the config reloaded.
+    #[cfg(feature = "canvas")]
+    NewmOptionsChanged(Vec<NewmOption>),
 }
 
 impl From<Duration> for Timestamp {
@@ -2137,7 +2295,7 @@ impl FromStr for ScaleToSet {
 }
 
 macro_rules! ensure {
-    ($cond:expr, $fmt:literal $($arg:tt)* ) => {
+    ($cond:expr_2021, $fmt:literal $($arg:tt)* ) => {
         if !$cond {
             return Err(format!($fmt $($arg)*));
         }
@@ -2205,10 +2363,10 @@ impl OutputAction {
                 if refresh.is_none() {
                     return Err("refresh rate is required for custom modes".to_string());
                 }
-                if let Some(refresh) = refresh {
-                    if *refresh <= 0. {
-                        return Err(format!("custom mode refresh rate {refresh} must be > 0"));
-                    }
+                if let Some(refresh) = refresh
+                    && *refresh <= 0.
+                {
+                    return Err(format!("custom mode refresh rate {refresh} must be > 0"));
                 }
                 Ok(())
             }
@@ -2223,6 +2381,43 @@ fn default_true() -> bool {
 
 fn default_position_change() -> PositionChange {
     PositionChange::AdjustFixed(0.)
+}
+
+/// Whether newm draws its synth background behind everything, and whether it moves.
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+pub enum SynthMode {
+    /// Not drawn: the backdrop colour, as without the block.
+    #[default]
+    Off,
+    /// One frame, drawn again only when the config or the output changes.
+    Still,
+    /// Moving, at up to the block's `max-fps`, while an output shows it.
+    Animated,
+}
+
+impl SynthMode {
+    /// The name the config and `set-synth-background` use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Still => "still",
+            Self::Animated => "animated",
+        }
+    }
+}
+
+impl FromStr for SynthMode {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "off" => Ok(Self::Off),
+            "still" => Ok(Self::Still),
+            "animated" => Ok(Self::Animated),
+            _ => Err(r#"invalid synth background mode, can be "off", "still" or "animated""#),
+        }
+    }
 }
 
 #[cfg(test)]

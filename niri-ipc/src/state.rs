@@ -52,6 +52,10 @@ pub struct EventStreamState {
 
     /// State of touchpads.
     pub touchpad: TouchpadState,
+
+    /// State of newm's live settings.
+    #[cfg(feature = "canvas")]
+    pub newm_options: NewmOptionsState,
 }
 
 /// The workspaces state communicated over the event stream.
@@ -118,6 +122,8 @@ impl EventStreamStatePart for EventStreamState {
         events.extend(self.config.replicate());
         events.extend(self.casts.replicate());
         events.extend(self.touchpad.replicate());
+        #[cfg(feature = "canvas")]
+        events.extend(self.newm_options.replicate());
         events
     }
 
@@ -129,6 +135,8 @@ impl EventStreamStatePart for EventStreamState {
         let event = self.config.apply(event)?;
         let event = self.casts.apply(event)?;
         let event = self.touchpad.apply(event)?;
+        #[cfg(feature = "canvas")]
+        let event = self.newm_options.apply(event)?;
         Some(event)
     }
 }
@@ -348,6 +356,34 @@ impl EventStreamStatePart for TouchpadState {
         match event {
             Event::TouchpadToggled { on } => {
                 self.on = on;
+            }
+            event => return Some(event),
+        }
+        None
+    }
+}
+
+/// newm's live settings as the event stream last sent them.
+#[cfg(feature = "canvas")]
+#[derive(Debug, Default)]
+pub struct NewmOptionsState {
+    /// The settings, once the compositor has sent them.
+    pub options: Option<Vec<crate::NewmOption>>,
+}
+
+#[cfg(feature = "canvas")]
+impl EventStreamStatePart for NewmOptionsState {
+    fn replicate(&self) -> Vec<Event> {
+        self.options
+            .iter()
+            .map(|options| Event::NewmOptionsChanged(options.clone()))
+            .collect()
+    }
+
+    fn apply(&mut self, event: Event) -> Option<Event> {
+        match event {
+            Event::NewmOptionsChanged(options) => {
+                self.options = Some(options);
             }
             event => return Some(event),
         }
