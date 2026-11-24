@@ -1,142 +1,206 @@
-<h1 align="center"><img alt="niri" src="https://github.com/user-attachments/assets/07d05cd0-d5dc-4a28-9a35-51bae8f119a0"></h1>
-<p align="center">A scrollable-tiling Wayland compositor.</p>
-<p align="center">
-    <a href="https://matrix.to/#/#niri:matrix.org"><img alt="Matrix" src="https://img.shields.io/badge/matrix-%23niri-blue?logo=matrix"></a>
-    <a href="https://github.com/niri-wm/niri/blob/main/LICENSE"><img alt="GitHub License" src="https://img.shields.io/github/license/niri-wm/niri"></a>
-    <a href="https://github.com/niri-wm/niri/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/niri-wm/niri?logo=github"></a>
-</p>
+# newm-rs
+
+A Wayland compositor with a strict 2D tile canvas: a fork of niri, inspired by newm and KDE.
+
+## newm-rs in two and a half minutes
 
 <p align="center">
-    <a href="https://niri-wm.github.io/niri/Getting-Started.html">Getting Started</a> | <a href="https://niri-wm.github.io/niri/Configuration%3A-Introduction.html">Configuration</a> | <a href="https://github.com/niri-wm/niri/discussions/325">Setup&nbsp;Showcase</a>
+  <a href="docs/video/out/newm-rs.mp4"><img width="960" alt="newm-rs: windows rearranging on a strict 2D tile canvas, replayed from a real session" src="docs/video/out/newm-rs-loop.webp"></a>
 </p>
+<p align="center">The canvas above is a real session, replayed; click it for the full video with narration.
+  Source: <a href="https://github.com/eordano/newm-rs">github.com/eordano/newm-rs</a></p>
 
-<img width="1280" height="720" alt="niri with a few windows open" src="https://github.com/user-attachments/assets/dea5909e-1859-4aaa-9d88-d37f9663e00b" />
+## Principles
 
-## About
+1. **Tiled windows never overlap other tiled windows.**
+2. **A window is never bigger than its display.**
+3. **Zoom is a camera.**
+4. **Changing focus moves the camera as little as possible.**
+5. **Moving the mouse without a click changes nothing.**
+6. **Everything the mouse can do, the keyboard can do too.**
+7. **One hand is enough.**
+8. **The left hand alone works too.**
+9. **As fast and as stable as possible.**
+10. **As compatible with KDE as possible.**
+11. **Beautiful and joyful to use.**
+12. **It respects your muscle memory.**
 
-Windows are arranged in columns on an infinite strip going to the right.
-Opening a new window never causes existing windows to resize.
-
-Every monitor has its own separate window strip.
-Windows can never "overflow" onto an adjacent monitor.
-
-Workspaces are dynamic and arranged vertically.
-Every monitor has an independent set of workspaces, and there's always one empty workspace present all the way down.
-
-The workspace arrangement is preserved across disconnecting and connecting monitors where it makes sense.
-When a monitor disconnects, its workspaces will move to another monitor, but upon reconnection they will move back to the original monitor.
+[docs/newm-rs/principles.md](docs/newm-rs/principles.md) says what each one means in practice.
 
 ## Features
 
-- Built from the ground up for scrollable tiling
-- [Dynamic workspaces](https://niri-wm.github.io/niri/Workspaces.html) like in GNOME
-- An [Overview](https://github.com/user-attachments/assets/379a5d1f-acdb-4c11-b36c-e85fd91f0995) that zooms out workspaces and windows
-- Built-in screenshot UI
-- Monitor and window screencasting through xdg-desktop-portal-gnome
-    - You can [block out](https://niri-wm.github.io/niri/Configuration%3A-Window-Rules.html#block-out-from) sensitive windows from screencasts
-    - [Dynamic cast target](https://niri-wm.github.io/niri/Screencasting.html#dynamic-screencast-target) that can change what it shows on the go
-- [Touchpad](https://github.com/niri-wm/niri/assets/1794388/946a910e-9bec-4cd1-a923-4a9421707515) and [mouse](https://github.com/niri-wm/niri/assets/1794388/8464e65d-4bf2-44fa-8c8e-5883355bd000) gestures
-- Group windows into [tabs](https://niri-wm.github.io/niri/Tabs.html)
-- Configurable layout: gaps, borders, struts, window sizes
-- [Gradient borders](https://niri-wm.github.io/niri/Configuration%3A-Layout.html#gradients) with Oklab and Oklch support
-- [Background blur](https://niri-wm.github.io/niri/Window-Effects.html) for windows and layer-shell surfaces
-- [Animations](https://github.com/niri-wm/niri/assets/1794388/ce178da2-af9e-4c51-876f-8709c241d95e) with support for [custom shaders](https://github.com/niri-wm/niri/assets/1794388/27a238d6-0a22-4692-b794-30dc7a626fad)
-- Live-reloading config
-- Works with [screen readers](https://niri-wm.github.io/niri/Accessibility.html)
+### The canvas
 
-## Video Demo
+- A 2D grid of fixed-size tiles. Every tiled window spans whole tiles, and apps are drawn 1:1 at
+  their own size. Tiles at the screen's edges show in part.
+- Placement rules: a move reassigns the fewest tiles, never splits an island of touching windows,
+  and a window making room keeps its row or column when it can.
+- New windows open at the nearest free spot, the one the camera scrolls least to show, at the
+  size the app picks, rounded to whole tiles. newm-rs remembers each app's last size.
+- Drag with a live preview: windows in the way step aside while you drag. Escape cancels.
+- Resize with a preview: a box shows where the window lands and what it pushes.
+- Grow and shrink by edges. Shrinking closes a gap between windows (a lake) and leaves open space
+  (the ocean) alone.
+- Swap with a neighbour, send to an edge, gather islands together.
+- Undo and redo every rearrangement.
+- Floating windows stay on screen, follow their parent window, or move with the canvas.
 
-https://github.com/niri-wm/niri/assets/1794388/bce834b0-f205-434e-a027-b373495f9729
+### The camera
 
-Also check out these videos that showcase a lot of the niri functionality:
+- Zoom in and out about the middle of the screen; one action returns to 1:1. No window is
+  resized by a zoom.
+- Pinch the touchpad with three fingers, or with Mod held, to zoom in whole steps. A plain
+  two-finger pinch stays with the app. Super+wheel zooms one step per notch with the
+  [suggested binds](docs/newm-rs/input.md#suggested-binds).
+- An overview of every window, with everything outside the screen dimmed.
+- Zoom to fit while Mod is held during a four-finger swipe, back on release.
+- Pan with Mod and the mouse, with acceleration and momentum you can tune, or with Mod and three
+  fingers on the touchpad.
+- A minimap in the bottom-left corner shows where the camera and the windows are whenever
+  something moves.
+- The view scrolls the least it must to show the focused window whole.
+- Alt+Tab with live thumbnails, optionally centring the window it lands on.
 
-- [Niri Is My New Favorite Wayland Compositor](https://www.youtube.com/watch?v=DeYx2exm04M) by Brodie Robertson
-- [How Is niri This Good? Live Demo + Config](https://www.youtube.com/watch?v=7XmD5UyyhZQ) by Nick Janetakis
+### Your session
+
+- Log out and back in: every window returns to its tiles.
+- Terminal windows (Ghostty, Alacritty, kitty, foot, Konsole, WezTerm and others) reattach their
+  tmux and ssh sessions; Chromium-family browsers relaunch with their last session, and Firefox
+  restores its own.
+- The lock screen stays locked even if the locker crashes. `newm-rs-lock`, the bundled locker,
+  never exits while the session is locked.
+- Screenshots and screen recording with Spectacle and the desktop portals.
+- An opt-in usage log of what the canvas does, in builds with the `telemetry` feature. It never
+  leaves your machine.
+
+### KDE and every toolkit
+
+- GTK 3, GTK 4, libadwaita, Qt and KDE apps, Firefox, Chromium and other browsers, Electron and
+  X11 apps, crisp at fractional scale.
+- KDE global shortcuts, KRunner's window search, KDE's Inhibit portal, KDE Connect's remote input.
+- Input methods, clipboard managers, keyboard shortcuts for VM viewers and remote desktops, modal
+  dialogs, the system bell, monitor power, explicit sync, and sandboxed apps kept away from
+  privileged protocols.
+
+### Stability
+
+- A VM suite runs real apps against newm-rs.
+- A Rocq model proves the canvas's rules: no overlap, minimum sizes kept, the zoom as a camera,
+  the least camera motion.
+- Any main-loop work of 8 ms or more names itself in the log.
+- Disk writes (session saves, the usage log) run on their own threads and never block the screen.
 
 ## Status
 
-Niri is stable for day-to-day use and does most things expected of a Wayland compositor.
-Many people are daily-driving niri, and are happy to help in our [Matrix channel].
+newm-rs is daily-driven. It tracks upstream niri's `main` branch. The canvas and session restore
+sit behind the `canvas` Cargo feature, and the usage log behind `telemetry`; built without
+`canvas`, newm-rs keeps niri's scrolling layout.
 
-Give it a try!
-Follow the instructions on the [Getting Started](https://niri-wm.github.io/niri/Getting-Started.html) page.
-Grab a desktop shell like [Dux Modular Shell] or [Noctalia] (or build a more traditional setup): niri by itself is not a complete desktop environment.
-Also check out [awesome-niri], a list of niri-related links and projects.
+## Getting started
 
-Here are some points you may have questions about:
+### Build with Nix
 
-- **Multi-monitor**: yes, a core part of the design from the very start. Mixed DPI works.
-- **Fractional scaling**: yes, plus all niri UI stays pixel-perfect.
-- **NVIDIA**: seems to work fine.
-- **Floating windows**: yes, starting from niri 25.01.
-- **Input devices**: niri supports tablets, touchpads, and touchscreens.
-You can map the tablet to a specific monitor, or use [OpenTabletDriver].
-We have touchpad gestures, but no touchscreen gestures yet.
-- **Wlr protocols**: yes, we have most of the important ones like layer-shell, gamma-control, screencopy.
-You can check on [wayland.app](https://wayland.app) at the bottom of each protocol's page.
-- **Performance**: while I run niri on beefy machines, I try to stay conscious of performance.
-I've seen someone use it fine on an Eee PC 900 from 2008, of all things.
-- **Xwayland**: [integrated](https://niri-wm.github.io/niri/Xwayland.html#using-xwayland-satellite) via xwayland-satellite starting from niri 25.08.
+```sh
+nix build            # or: nix build .#newm-rs
+nix run . -- --version
+```
 
-## Media
+The flake's default package, `newm-rs`, builds with the `canvas` feature. It installs
+`bin/newm-rs`, `bin/newm-rs-lock`, `bin/newm-rs-session`, the systemd user units
+`newm-rs.service` and `newm-rs-shutdown.target`, the portals config and a `newm-rs` session file
+in `share/wayland-sessions`. `newm-rs-debug` is the same build unoptimized. The flake's overlay
+adds `newm-rs` to nixpkgs.
 
-[niri: Making a Wayland compositor in Rust](https://youtu.be/Kmz8ODolnDg?list=PLRdS-n5seLRqrmWDQY4KDqtRMfIwU0U3T) · *December 2024*
+### Build with cargo
 
-My talk from the 2024 Moscow RustCon about niri, and how I do randomized property testing and profiling, and measure input latency.
-The talk is in Russian, but I prepared full English subtitles that you can find in YouTube's subtitle language selector.
+```sh
+cargo build --release --features canvas
+cargo build --release -p newm-rs-lock
+```
 
-[An interview with Ivan, the developer behind Niri](https://www.trommelspeicher.de/podcast/special_the_developer_behind_niri) · *June 2025*
+This builds `target/release/newm-rs` with the canvas. It needs the libraries niri needs (see
+[docs/newm-rs/development.md](docs/newm-rs/development.md)); `nix develop` provides them. Install
+it as niri is installed: [niri's Getting Started](docs/wiki/Getting-Started.md) and
+[packaging notes](docs/wiki/Packaging-niri.md) apply.
 
-An interview by a German tech podcast Das Triumvirat (in English).
-We talk about niri development and history, and my experience building and maintaining niri.
+### The session
 
-[A tour of the niri scrolling-tiling Wayland compositor](https://lwn.net/Articles/1025866/) · *July 2025*
+Start the session from a TTY with `newm-rs-session` (`resources/newm-rs-session` for a cargo build). It
+imports your login environment into systemd, starts the compositor's user service and waits for
+it. The Nix package installs a display-manager session file; for a cargo build, add one such as
+`/usr/share/wayland-sessions/newm-rs.desktop`:
 
-An LWN article with a nice overview and introduction to niri.
+```ini
+[Desktop Entry]
+Name=newm-rs
+Exec=newm-rs-session
+Type=Application
+DesktopNames=niri;KDE
+```
 
-[How to test a Wayland compositor?](https://youtu.be/w44fYK5z418?list=PLK4NE4dSsLlw) · *October 2026*
+`DesktopNames=niri;KDE` gives the session `XDG_CURRENT_DESKTOP=niri:KDE`, which KDE apps want;
+see [docs/newm-rs/kde.md](docs/newm-rs/kde.md).
 
-My talk about some testing techniques used in niri: property-based tests, snapshot tests, client-server tests.
-The first half overlaps with my RustCon talk, the second half is new.
-The talk is in Russian, but I prepared full English subtitles that you can find in YouTube's subtitle language selector.
+### The config
 
-## Contributing
+newm-rs reads niri's KDL config from the same place: `~/.config/niri/config.kdl` (or
+`$NIRI_CONFIG`, or `--config`). On first start it writes niri's default config there. Every niri
+option keeps working; newm-rs adds `layout { canvas { } }` and a few bind actions:
 
-If you'd like to help with niri, there are plenty of both coding- and non-coding-related ways to do so.
-See [CONTRIBUTING.md](https://github.com/niri-wm/niri/blob/main/CONTRIBUTING.md) for an overview.
+```kdl
+layout {
+    canvas {
+        tile-width 720
+        tile-height 465
+        default-width { proportion 0.5; }
+        floating-follow "parent"
+    }
+}
 
-## Inspiration
+binds {
+    Mod+0 { zoom-reset; }
+    Mod+Z { undo; }
+    Mod+Shift+Z { redo; }
+}
+```
 
-Niri is heavily inspired by [PaperWM] which implements scrollable tiling on top of GNOME Shell.
+`newm-rs validate` checks a config; see
+[docs/newm-rs/configuration.md](docs/newm-rs/configuration.md).
 
-One of the reasons that prompted me to try writing my own compositor is being able to properly separate the monitors.
-Being a GNOME Shell extension, PaperWM has to work against Shell's global window coordinate space to prevent windows from overflowing.
+## niri and newm
 
-## Tile Scrollably Elsewhere
+- **niri** gives newm-rs everything but the layout: the backends, rendering, input, protocols,
+  IPC, config, animations and the overview. newm-rs swaps niri's scrolling columns for the tile
+  canvas and adds session restore and the KDE services.
+- **newm**, Jonas Bucher's Python compositor for laptops and touchpads, gave the idea: windows
+  tiled on a 2D canvas you pan and zoom over.
 
-Here are some other projects which implement a similar workflow:
+## Documentation
 
-- [PaperWM]: scrollable tiling on top of GNOME Shell.
-- [karousel]: scrollable tiling on top of KDE.
-- [scroll](https://github.com/dawsers/scroll) and [papersway]: scrollable tiling on top of sway/i3.
-- Hyprland has a built-in [scrolling layout](https://wiki.hypr.land/Configuring/Layouts/Scrolling-Layout/).
-- [Paneru] and [PaperWM.spoon]: scrollable tiling on top of macOS.
+- [Principles](docs/newm-rs/principles.md)
+- [Specification](docs/newm-rs/SPEC.md): every rule, default and test
+- [The canvas](docs/newm-rs/canvas.md)
+- [The camera](docs/newm-rs/camera.md)
+- [Input](docs/newm-rs/input.md)
+- [Configuration](docs/newm-rs/configuration.md)
+- [Session restore and the usage log](docs/newm-rs/session.md)
+- [KDE and Plasma apps](docs/newm-rs/kde.md)
+- [Wayland protocols](docs/newm-rs/protocols.md)
+- [IPC](docs/newm-rs/ipc.md)
+- [Development](docs/newm-rs/development.md)
+- [The README video](docs/newm-rs/video.md)
 
-## Contact
+niri's own documentation is in [docs/wiki](docs/wiki/README.md).
 
-Our main communication channel is a Matrix chat, feel free to join and ask a question: https://matrix.to/#/#niri:matrix.org
+## Credits
 
-We also have a community Discord server: https://discord.gg/vT8Sfjy7sx
+- [niri](https://github.com/niri-wm/niri), by Ivan Molodetskikh and its contributors: newm-rs is
+  niri with a different layout.
+- [newm](https://github.com/jbuchermn/newm), by Jonas Bucher (jbuchermn): the idea of the 2D
+  canvas comes from it.
+- [Smithay](https://github.com/Smithay/smithay), the Wayland compositor library niri and newm-rs
+  are built on.
 
-[PaperWM]: https://github.com/paperwm/PaperWM
-[waybar]: https://github.com/Alexays/Waybar
-[fuzzel]: https://codeberg.org/dnkl/fuzzel
-[awesome-niri]: https://github.com/niri-wm/awesome-niri
-[karousel]: https://github.com/peterfajdiga/karousel
-[papersway]: https://spwhitton.name/tech/code/papersway/
-[Paneru]: https://github.com/karinushka/paneru
-[PaperWM.spoon]: https://github.com/mogenson/PaperWM.spoon
-[Matrix channel]: https://matrix.to/#/#niri:matrix.org
-[OpenTabletDriver]: https://opentabletdriver.net/
-[Dux Modular Shell]: https://duxlabs.dev/
-[Noctalia]: https://noctalia.dev/
+## License
+
+GPL-3.0-or-later, as niri. See [LICENSE](LICENSE).

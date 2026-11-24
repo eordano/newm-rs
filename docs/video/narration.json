@@ -1,0 +1,217 @@
+{
+ "voice": {
+  "model": "qwen3-tts-base"
+ },
+ "segments": [
+  {
+   "id": "open1",
+   "section": "open",
+   "scene": "title",
+   "caption": "",
+   "text": "Introducing new M R S!"
+  },
+  {
+   "id": "open2",
+   "section": "open",
+   "scene": "flyin",
+   "caption": "a fork of niri, inspired by newm and by KDE",
+   "text": "A fork of niri, inspired by new-M, and by amazing desktop environments like KDE."
+  },
+  {
+   "id": "open3",
+   "section": "open",
+   "scene": "flyin2",
+   "caption": "built on principles",
+   "text": "Built on principles."
+  },
+  {
+   "id": "p1",
+   "section": "principles",
+   "scene": "p1",
+   "caption": "Tiled windows never overlap other tiled windows",
+   "text": "One. Tiled windows never overlap other tiled windows."
+  },
+  {
+   "id": "p2",
+   "section": "principles",
+   "scene": "p2",
+   "caption": "A window is never bigger than its display",
+   "text": "Two. A window is never bigger than its display."
+  },
+  {
+   "id": "p3",
+   "section": "principles",
+   "scene": "p3",
+   "caption": "Zoom is a camera",
+   "text": "Three. Zoom is a camera: no app is ever resized by a zoom."
+  },
+  {
+   "id": "p4",
+   "section": "principles",
+   "scene": "p4",
+   "caption": "Changing focus moves the camera as little as possible",
+   "text": "Four. Changing focus moves the camera as little as possible."
+  },
+  {
+   "id": "p5",
+   "section": "principles",
+   "scene": "p5",
+   "caption": "Moving the mouse without a click changes nothing",
+   "text": "Five. Moving the mouse without a click changes nothing."
+  },
+  {
+   "id": "p6",
+   "section": "principles",
+   "scene": "p6",
+   "caption": "Everything the mouse can do, the keyboard can do too",
+   "text": "Six. Everything the mouse can do, the keyboard can do too."
+  },
+  {
+   "id": "p7",
+   "section": "principles",
+   "scene": "p7",
+   "caption": "One hand is enough",
+   "text": "Seven. One hand is enough."
+  },
+  {
+   "id": "p8",
+   "section": "principles",
+   "scene": "p8",
+   "caption": "The left hand alone works too",
+   "text": "Eight. The left hand alone works too."
+  },
+  {
+   "id": "p9",
+   "section": "principles",
+   "scene": "p9",
+   "caption": "As fast and as stable as possible",
+   "text": "Nine. As fast and as stable as possible: forty-six microseconds per layout, and disk writes never block the screen."
+  },
+  {
+   "id": "p10",
+   "section": "principles",
+   "scene": "p10",
+   "caption": "As compatible with KDE as possible",
+   "text": "Ten. As compatible with KDE as possible."
+  },
+  {
+   "id": "p11",
+   "section": "principles",
+   "scene": "p11",
+   "caption": "Beautiful and joyful to use",
+   "text": "Eleven. Beautiful, and joyful to use."
+  },
+  {
+   "id": "p12",
+   "section": "principles",
+   "scene": "p12",
+   "caption": "It respects your muscle memory",
+   "text": "Twelve. It respects your muscle memory."
+  },
+  {
+   "id": "canvas1",
+   "section": "features",
+   "scene": "f_grid",
+   "caption": "a 2D grid of fixed tiles, apps drawn 1:1",
+   "text": "A grid of fixed tiles, every app drawn at its own size."
+  },
+  {
+   "id": "canvas2",
+   "section": "features",
+   "scene": "f_open",
+   "caption": "new windows open at the nearest free spot",
+   "text": "New windows open at the nearest free spot."
+  },
+  {
+   "id": "canvas3",
+   "section": "features",
+   "scene": "f_drag",
+   "caption": "drag a window: the others step aside, live",
+   "text": "Drag a window, and the others step aside, live."
+  },
+  {
+   "id": "canvas4",
+   "section": "features",
+   "scene": "f_resize",
+   "caption": "resize: a box shows where it lands",
+   "text": "Resize, and a box shows where it lands."
+  },
+  {
+   "id": "canvas5",
+   "section": "features",
+   "scene": "f_undo",
+   "caption": "undo and redo every rearrangement",
+   "text": "Undo and redo everything."
+  },
+  {
+   "id": "camera1",
+   "section": "features",
+   "scene": "f_zoom",
+   "caption": "zoom about the middle, back to 1:1",
+   "text": "Zoom about the middle, and one key brings you back to one to one."
+  },
+  {
+   "id": "camera2",
+   "section": "features",
+   "scene": "f_overview",
+   "caption": "the overview shows every window, the rest dimmed",
+   "text": "The overview shows every window, with the rest dimmed."
+  },
+  {
+   "id": "camera3",
+   "section": "features",
+   "scene": "f_switcher",
+   "caption": "live thumbnails; the window lands centred",
+   "text": "Alt Tab shows live thumbnails, and centres the window."
+  },
+  {
+   "id": "session1",
+   "section": "features",
+   "scene": "f_restore",
+   "caption": "log back in: every window returns to its tiles",
+   "text": "Log out and back in: every window returns to its tiles."
+  },
+  {
+   "id": "session2",
+   "section": "features",
+   "scene": "f_reattach",
+   "caption": "terminals reattach, browsers reopen their tabs",
+   "text": "Terminals reattach their sessions, and browsers reopen their tabs."
+  },
+  {
+   "id": "session3",
+   "section": "features",
+   "scene": "f_lock",
+   "caption": "the lock screen stays locked",
+   "text": "The lock screen stays locked, even if the locker crashes."
+  },
+  {
+   "id": "kde1",
+   "section": "features",
+   "scene": "f_toolkits",
+   "caption": "every toolkit, crisp at fractional scale 1.25",
+   "text": "GTK, Qt and KDE, Firefox, Chromium and other browsers, Electron and X11 apps: all crisp at fractional scale."
+  },
+  {
+   "id": "kde2",
+   "section": "features",
+   "scene": "f_kde",
+   "caption": "KDE shortcuts, KRunner, KDE Connect, portals",
+   "text": "KDE shortcuts, KRunner, KDE Connect and the portals all work."
+  },
+  {
+   "id": "stab1",
+   "section": "features",
+   "scene": "f_vm",
+   "caption": "every build runs real apps in a VM suite",
+   "text": "Every build runs real apps in a VM suite."
+  },
+  {
+   "id": "close",
+   "section": "close",
+   "scene": "close",
+   "caption": "",
+   "text": "new M R S. Check it out!"
+  }
+ ]
+}
