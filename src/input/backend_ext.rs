@@ -6,6 +6,7 @@ use smithay::wayland::virtual_keyboard::VirtualKeyboardDevice;
 use smithay::wayland::virtual_pointer::VirtualPointerDevice;
 
 use crate::niri::State;
+use crate::protocols::kde_fake_input::FakeInputDevice;
 
 pub trait NiriInputBackend: input::InputBackend<Device = Self::NiriDevice> {
     type NiriDevice: NiriInputDevice;
@@ -53,6 +54,13 @@ impl NiriInputDevice for VirtualPointerDevice {
 
 impl NiriInputDevice for VirtualKeyboardDevice {
     fn output(&self, _: &State) -> Option<Output> {
+        None
+    }
+}
+
+impl NiriInputDevice for FakeInputDevice {
+    fn output(&self, _: &State) -> Option<Output> {
+        // Positions arrive in global coordinates; the handler maps them onto the layout.
         None
     }
 }

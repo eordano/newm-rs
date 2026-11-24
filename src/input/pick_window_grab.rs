@@ -68,6 +68,7 @@ impl PointerGrab<State> for PickWindowGrab {
         data.niri.suppressed_buttons.insert(event.button);
 
         if let Some(tx) = data.niri.pick_window.take() {
+            data.niri.pick_window_click = Some(handle.current_location());
             let _ = tx.send_blocking(
                 data.niri
                     .window_under(handle.current_location())
