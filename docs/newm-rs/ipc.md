@@ -219,7 +219,7 @@ back.
 
 A client that shows windows on tiles it chooses (a remote-window client, a layout script) reads
 each window's tiles from the window list, places a window by its id, and keeps a window out of
-the saved session. A build with the `canvas` feature does all three; newm-river does the same.
+the saved session. A build with the `canvas` feature does all three.
 [SPEC 6.11](SPEC.md#611-windows-over-ipc) has the rules.
 
 ### Tiles in the window list
@@ -250,11 +250,10 @@ Each window of `Windows`, `FocusedWindow`, `PickedWindow` and of the events `Win
 - A floating window has `"tiles": null` and `"is_floating": true`. A fullscreen or maximized
   tiled window keeps the tiles it returns to.
 - `workspace_id` names the window's canvas: each workspace has one canvas, and `Workspaces`
-  gives the workspace's output and index. newm-river has one canvas per output, and its
-  workspace id is the output's.
+  gives the workspace's output and index.
 - When a window's tiles change (it moves, it resizes, or it makes room for another window), the
   event `WindowLayoutsChanged` carries its new `layout`, tiles included, in the same burst as the
-  change. newm-river sends `WindowOpenedOrChanged` with the whole window instead.
+  change.
 - The field is additive: a build without the `canvas` feature sends none, and a client reads a
   missing `tiles` as `null`.
 
@@ -295,5 +294,5 @@ does not make their toplevels, but it does see their ids in the window list. A c
 request when `WindowOpenedOrChanged` first shows its window; the session file follows a change
 by 2 to 4 seconds, so the request arrives first.
 
-On the command line, `newm-river msg newm-place-window ID COLUMN ROW [WIDTH HEIGHT]` and
-`newm-river msg newm-restore-exclude ID [true|false]` send them.
+On the command line, `newm-rs msg newm-place-window ID COLUMN ROW [WIDTH HEIGHT]` and
+`newm-rs msg newm-restore-exclude ID [true|false]` send them.

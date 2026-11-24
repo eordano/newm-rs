@@ -1008,8 +1008,7 @@ A client that shows windows on tiles it chooses reads and sets them by window id
 ([IPC](ipc.md#windows-on-tiles)).
 - The window list and the window events give each tiled window's tiles on its canvas (column,
   row, width, height) as `layout.tiles`, and none for a floating window. The workspace id names
-  the canvas. A change of tiles sends `WindowLayoutsChanged` (newm-river:
-  `WindowOpenedOrChanged`).
+  the canvas. A change of tiles sends `WindowLayoutsChanged`.
 - `NewmPlaceWindow` takes a window id, a tile and an optional span. It MUST go through the
   canvas's own operations, in this order: one `move_to` to the tile at the span the window has,
   as a drop by the pointer (3.11), then one `resize` of the right edge and one of the bottom
