@@ -1,6 +1,7 @@
 use smithay::backend::input::{
-    Device, DeviceCapability, Event, InputBackend, InputTime, KeyState, KeyboardKeyEvent, Keycode,
-    UnusedEvent,
+    Device, DeviceCapability, Event, GestureBeginEvent, GestureEndEvent, GesturePinchBeginEvent,
+    GesturePinchEndEvent, GesturePinchUpdateEvent, InputBackend, InputTime, KeyState,
+    KeyboardKeyEvent, Keycode, UnusedEvent,
 };
 use smithay::output::Output;
 
@@ -18,6 +19,19 @@ pub struct TestKeyboardKeyEvent {
     pub count: u32,
 }
 
+/// A touchpad pinch begins with this many fingers.
+pub struct TestPinchBegin {
+    pub fingers: u32,
+}
+
+/// The fingers of a touchpad pinch are `scale` times as far apart as when it began.
+pub struct TestPinchUpdate {
+    pub scale: f64,
+}
+
+/// A touchpad pinch ends.
+pub struct TestPinchEnd;
+
 impl InputBackend for TestInputBackend {
     type Device = TestInputDevice;
 
@@ -30,9 +44,9 @@ impl InputBackend for TestInputBackend {
     type GestureSwipeBeginEvent = UnusedEvent;
     type GestureSwipeUpdateEvent = UnusedEvent;
     type GestureSwipeEndEvent = UnusedEvent;
-    type GesturePinchBeginEvent = UnusedEvent;
-    type GesturePinchUpdateEvent = UnusedEvent;
-    type GesturePinchEndEvent = UnusedEvent;
+    type GesturePinchBeginEvent = TestPinchBegin;
+    type GesturePinchUpdateEvent = TestPinchUpdate;
+    type GesturePinchEndEvent = TestPinchEnd;
     type GestureHoldBeginEvent = UnusedEvent;
     type GestureHoldEndEvent = UnusedEvent;
 
@@ -102,3 +116,55 @@ impl KeyboardKeyEvent<TestInputBackend> for TestKeyboardKeyEvent {
         self.count
     }
 }
+
+macro_rules! test_event {
+    ($ty:ty) => {
+        impl Event<TestInputBackend> for $ty {
+            fn time(&self) -> InputTime {
+                InputTime::from_micros(0)
+            }
+
+            fn device(&self) -> TestInputDevice {
+                TestInputDevice
+            }
+        }
+    };
+}
+
+test_event!(TestPinchBegin);
+test_event!(TestPinchUpdate);
+test_event!(TestPinchEnd);
+
+impl GestureBeginEvent<TestInputBackend> for TestPinchBegin {
+    fn fingers(&self) -> u32 {
+        self.fingers
+    }
+}
+
+impl GesturePinchBeginEvent<TestInputBackend> for TestPinchBegin {}
+
+impl GesturePinchUpdateEvent<TestInputBackend> for TestPinchUpdate {
+    fn delta_x(&self) -> f64 {
+        0.
+    }
+
+    fn delta_y(&self) -> f64 {
+        0.
+    }
+
+    fn scale(&self) -> f64 {
+        self.scale
+    }
+
+    fn rotation(&self) -> f64 {
+        0.
+    }
+}
+
+impl GestureEndEvent<TestInputBackend> for TestPinchEnd {
+    fn cancelled(&self) -> bool {
+        false
+    }
+}
+
+impl GesturePinchEndEvent<TestInputBackend> for TestPinchEnd {}

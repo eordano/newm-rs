@@ -538,3 +538,60 @@ fn focus_on_type_in_overview() {
     key released: 16
     ");
 }
+
+#[test]
+fn focus_window_takes_the_keyboard_from_an_on_demand_layer() {
+    let mut f = Fixture::new();
+    f.add_output(1, (1920, 1080));
+    let id = f.add_client();
+
+    let window = f.client(id).create_window();
+    let win_surface = window.surface.clone();
+    window.commit();
+    f.roundtrip(id);
+    let window = f.client(id).window(&win_surface);
+    window.attach_new_buffer();
+    window.set_size(100, 100);
+    window.ack_last_and_commit();
+    f.double_roundtrip(id);
+
+    // An on-demand layer surface takes the keyboard when it maps.
+    let layer = f.client(id).create_layer(None, Layer::Top, "");
+    let surface = layer.surface.clone();
+    layer.set_configure_props(LayerConfigureProps {
+        size: Some((100, 100)),
+        kb_interactivity: Some(KeyboardInteractivity::OnDemand),
+        ..Default::default()
+    });
+    layer.commit();
+    f.roundtrip(id);
+    let layer = f.client(id).layer(&surface);
+    layer.attach_new_buffer();
+    layer.set_size(100, 100);
+    layer.ack_last_and_commit();
+    f.double_roundtrip(id);
+    assert!(f.niri().layer_shell_on_demand_focus.is_some());
+    let before = f
+        .client(id)
+        .state
+        .format_recent_keyboard_events(&win_surface);
+    assert!(
+        before.ends_with("leave"),
+        "the layer did not take the keyboard: {before}"
+    );
+
+    // Focusing a window (IPC focus-window, Alt+Tab, activation, KRunner) gives it the keyboard,
+    // as every other focus action already did.
+    let window = f.niri().layout.windows().next().unwrap().1.window.clone();
+    f.niri_state().focus_window(&window);
+    f.double_roundtrip(id);
+    assert!(f.niri().layer_shell_on_demand_focus.is_none());
+    let events = f
+        .client(id)
+        .state
+        .format_recent_keyboard_events(&win_surface);
+    assert!(
+        events.starts_with("enter"),
+        "the window got no keyboard enter: {events}"
+    );
+}

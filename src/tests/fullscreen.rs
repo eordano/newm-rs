@@ -28,6 +28,7 @@ fn set_up() -> (Fixture, ClientId, WlSurface) {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn windowed_fullscreen() {
     let (mut f, id, surface) = set_up();
 
@@ -87,6 +88,7 @@ fn windowed_fullscreen() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn windowed_fullscreen_chain() {
     let (mut f, id, surface) = set_up();
 
@@ -156,6 +158,7 @@ fn windowed_fullscreen_chain() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn unfullscreen_before_fullscreen_ack_doesnt_prevent_view_offset_save_restore() {
     let (mut f, id, _surface) = set_up();
 
@@ -217,6 +220,7 @@ fn unfullscreen_before_fullscreen_ack_doesnt_prevent_view_offset_save_restore() 
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn interactive_move_unfullscreen_to_scrolling_restores_size() {
     let (mut f, id, surface) = set_up();
 
@@ -257,6 +261,7 @@ fn interactive_move_unfullscreen_to_scrolling_restores_size() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn interactive_move_unmaximize_to_scrolling_restores_size() {
     let (mut f, id, surface) = set_up();
 

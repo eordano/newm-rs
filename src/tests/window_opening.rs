@@ -10,6 +10,7 @@ use crate::utils::spawning::store_and_increase_nofile_rlimit;
 use crate::utils::with_toplevel_role;
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn simple_no_workspaces() {
     let mut f = Fixture::new();
 
@@ -38,6 +39,7 @@ fn simple_no_workspaces() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn simple() {
     let mut f = Fixture::new();
     f.add_output(1, (1920, 1080));
@@ -162,6 +164,7 @@ impl fmt::Display for DefaultSize {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn target_output_and_workspaces() {
     store_and_increase_nofile_rlimit();
 
@@ -686,6 +689,7 @@ post-map configures:
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn fullscreen_maximize() {
     store_and_increase_nofile_rlimit();
 

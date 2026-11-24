@@ -63,6 +63,7 @@ pub struct State {
     pub layer_shell: Option<ZwlrLayerShellV1>,
     pub virtual_pointer_manager: Option<ZwlrVirtualPointerManagerV1>,
     pub virtual_pointer: Option<ZwlrVirtualPointerV1>,
+    pub fake_input: Option<fake_input::OrgKdeKwinFakeInput>,
     pub spbm: Option<WpSinglePixelBufferManagerV1>,
     pub viewporter: Option<WpViewporter>,
     pub ksim: Option<ZwpKeyboardShortcutsInhibitManagerV1>,
@@ -264,6 +265,7 @@ impl Client {
             layer_shell: None,
             virtual_pointer_manager: None,
             virtual_pointer: None,
+            fake_input: None,
             spbm: None,
             viewporter: None,
             ksim: None,
@@ -502,6 +504,10 @@ impl Window {
         self.xdg_toplevel.set_title(title.to_owned());
     }
 
+    pub fn set_app_id(&self, app_id: &str) {
+        self.xdg_toplevel.set_app_id(app_id.to_owned());
+    }
+
     pub fn recent_configures(&mut self) -> impl Iterator<Item = &Configure> {
         let start = self.configures_looked_at;
         self.configures_looked_at = self.configures_received.len();
@@ -663,6 +669,12 @@ impl Dispatch<WlRegistry, ()> for State {
                 } else if interface == ZwlrVirtualPointerManagerV1::interface().name {
                     let version = min(version, ZwlrVirtualPointerManagerV1::interface().version);
                     state.virtual_pointer_manager = Some(registry.bind(name, version, qh, ()));
+                } else if interface == fake_input::OrgKdeKwinFakeInput::interface().name {
+                    let version = min(
+                        version,
+                        fake_input::OrgKdeKwinFakeInput::interface().version,
+                    );
+                    state.fake_input = Some(registry.bind(name, version, qh, ()));
                 } else if interface == WpSinglePixelBufferManagerV1::interface().name {
                     let version = min(version, WpSinglePixelBufferManagerV1::interface().version);
                     state.spbm = Some(registry.bind(name, version, qh, ()));
@@ -873,6 +885,27 @@ impl Dispatch<ZwlrLayerShellV1, ()> for State {
 
 wayland_client::delegate_noop!(State: ZwlrVirtualPointerManagerV1);
 wayland_client::delegate_noop!(State: ZwlrVirtualPointerV1);
+wayland_client::delegate_noop!(State: fake_input::OrgKdeKwinFakeInput);
+
+/// Client side of `org_kde_kwin_fake_input`.
+pub mod fake_input {
+    #![allow(dead_code, non_camel_case_types, unused_unsafe, unused_variables)]
+    #![allow(non_upper_case_globals, non_snake_case, unused_imports)]
+    #![allow(missing_docs, clippy::all)]
+
+    use wayland_client;
+    use wayland_client::protocol::*;
+
+    pub mod __interfaces {
+        use wayland_client::protocol::__interfaces::*;
+        wayland_scanner::generate_interfaces!("resources/kde-fake-input.xml");
+    }
+    use self::__interfaces::*;
+
+    wayland_scanner::generate_client_code!("resources/kde-fake-input.xml");
+
+    pub use org_kde_kwin_fake_input::OrgKdeKwinFakeInput;
+}
 
 impl Dispatch<WlSurface, ()> for State {
     fn event(

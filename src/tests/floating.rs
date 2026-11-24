@@ -284,6 +284,7 @@ fn resize_to_different_then_same() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn restore_floating_size() {
     let (mut f, id, surface) = set_up();
 
@@ -384,6 +385,7 @@ fn moving_across_workspaces_doesnt_cancel_resize() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn moving_to_floating_doesnt_cancel_resize() {
     let (mut f, id, surface) = set_up();
     let _ = f.client(id).window(&surface).recent_configures();
@@ -707,6 +709,7 @@ fn state_change_doesnt_break_use_window_size() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn interactive_move_restores_floating_size_when_set_to_floating() {
     let (mut f, id, surface) = set_up();
 
@@ -781,6 +784,7 @@ fn interactive_move_restores_floating_size_when_set_to_floating() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn floating_doesnt_store_fullscreen_size() {
     let mut f = Fixture::new();
     f.add_output(1, (1920, 1080));
@@ -841,6 +845,7 @@ fn floating_doesnt_store_fullscreen_size() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn floating_doesnt_store_maximized_size() {
     let mut f = Fixture::new();
     f.add_output(1, (1920, 1080));
@@ -971,6 +976,7 @@ fn unmap_from_floating() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn unfullscreen_to_floating_doesnt_send_extra_configure() {
     let (mut f, id, surface) = set_up();
 
@@ -998,6 +1004,7 @@ fn unfullscreen_to_floating_doesnt_send_extra_configure() {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn unmaximize_to_floating_doesnt_send_extra_configure() {
     let (mut f, id, surface) = set_up();
 
@@ -1291,6 +1298,7 @@ layout {
 }
 
 #[test]
+#[cfg_attr(feature = "canvas", ignore = "assumes the scrolling layout")]
 fn repeated_size_request() {
     let (mut f, id, surface) = set_up();
     let _ = f.client(id).window(&surface).recent_configures();
