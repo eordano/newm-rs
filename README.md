@@ -2,10 +2,8 @@
 
 A Wayland compositor with a strict 2D tile canvas: a fork of niri, inspired by newm and KDE.
 
-## newm-rs in two and a half minutes
-
 <p align="center">
-  <a href="docs/video/out/newm-rs.mp4"><img width="960" alt="newm-rs: windows rearranging on a strict 2D tile canvas, replayed from a real session" src="docs/video/out/newm-rs-loop.webp"></a>
+  <a href="https://github.com/user-attachments/assets/da80024c-dc49-48f1-a903-395ca17d32a1"><img width="960" alt="newm-rs: windows rearranging on a strict 2D tile canvas, replayed from a real session" src="docs/video/out/newm-rs-loop.webp"></a>
 </p>
 
 ## Principles
