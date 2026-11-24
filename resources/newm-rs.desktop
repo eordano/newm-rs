@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=newm-rs
+Comment=newm's tile canvas on niri
+Exec=newm-rs-session
+Type=Application
+DesktopNames=niri;KDE

@@ -1,0 +1,6 @@
+type           = internal
+restart        = false
+depends-on:    newm-rs
+waits-for.d:   $XDG_CONFIG_HOME/dinit.d/newm-rs.d/
+waits-for.d:   $HOME/.config/dinit.d/newm-rs.d/
+waits-for.d:   /etc/dinit.d/user/newm-rs.d/
