@@ -22,6 +22,8 @@ rust-version = "1.88"
 new_without_default = "allow"
 collapsible_match = "allow"
 needless_bool = "allow"
+# Edition 2024 on Rust 1.88 has let chains; the code niri shares is written without them.
+collapsible_if = "allow"
 
 # Silence, Clippy
 # A Smithay user is talking
