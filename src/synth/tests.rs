@@ -134,7 +134,7 @@ struct Diff {
 fn compare(a: &[u8], b: &[u8], levels: u8) -> Diff {
     assert_eq!(a.len(), b.len());
     let (mut off, mut sum, mut max) = (0usize, 0u64, 0u8);
-    for (p, q) in a.chunks_exact(4).zip(b.chunks_exact(4)) {
+    for (p, q) in a.as_chunks::<4>().0.iter().zip(b.as_chunks::<4>().0) {
         let d = (0..3).map(|i| p[i].abs_diff(q[i])).max().unwrap();
         sum += (0..3).map(|i| u64::from(p[i].abs_diff(q[i]))).sum::<u64>();
         max = max.max(d);
@@ -152,7 +152,9 @@ fn compare(a: &[u8], b: &[u8], levels: u8) -> Diff {
 
 fn mean_level(a: &[u8]) -> f64 {
     let sum: u64 = a
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|p| u64::from(p[0]) + u64::from(p[1]) + u64::from(p[2]))
         .sum();
     sum as f64 / (a.len() / 4 * 3) as f64
@@ -350,7 +352,9 @@ fn look_pngs() {
     let mut renderer = renderer();
     let write = |name: String, rgba: &[u8], w: i32, h: i32| {
         let px: Vec<u32> = rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|p| u32::from_le_bytes([p[0], p[1], p[2], 0xff]))
             .collect();
         newm_synth::png::write(&dir.join(&name), &px, w as usize, h as usize).unwrap();

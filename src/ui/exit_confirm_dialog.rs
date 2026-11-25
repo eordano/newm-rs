@@ -29,6 +29,7 @@ use crate::render_helpers::texture::{TextureBuffer, TextureRenderElement};
 use crate::ui::textless::Panel;
 use crate::utils::{output_size, to_physical_precise_round};
 
+#[cfg(any(feature = "text", feature = "dbus"))]
 const KEY_NAME: &str = "Enter";
 #[cfg(feature = "text")]
 const PADDING: i32 = 16;
@@ -301,6 +302,7 @@ fn render(scale: f64) -> anyhow::Result<MemoryBuffer> {
     Ok(panel.into_buffer(scale))
 }
 
+#[cfg(any(feature = "text", feature = "dbus"))]
 fn text(markup: bool) -> String {
     let key = if markup {
         format!("<span face='mono' bgcolor='#2C2C2C'> {KEY_NAME} </span>")

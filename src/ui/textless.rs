@@ -48,10 +48,10 @@ impl Panel {
     fn fill(&mut self, inside: impl Fn(i32, i32) -> bool, [r, g, b]: [f64; 3]) {
         let [r, g, b] = [r, g, b].map(|c| (c * 255.).round() as u8);
         let width = self.width;
-        for (i, pixel) in self.data.chunks_exact_mut(4).enumerate() {
+        for (i, pixel) in self.data.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let i = i as i32;
             if inside(i % width, i / width) {
-                pixel.copy_from_slice(&[b, g, r, 255]);
+                *pixel = [b, g, r, 255];
             }
         }
     }

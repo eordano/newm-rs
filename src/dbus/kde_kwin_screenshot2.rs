@@ -307,7 +307,7 @@ pub fn composite(mut parts: Vec<Part>) -> Option<(i32, i32, Capture)> {
                 dst.copy_from_slice(src);
                 continue;
             }
-            for (col, px) in dst.chunks_exact_mut(4).enumerate() {
+            for (col, px) in dst.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let src_col = (col * src_w / w).min(src_w - 1);
                 px.copy_from_slice(&src[src_col * 4..][..4]);
             }

@@ -635,6 +635,17 @@ fn egl_a_set_mode_holds_until_the_config_changes_the_mode() {
 
 #[test]
 fn newm_rs_msg_action_parses_both_actions() {
+    // In a debug build clap's parser of the action enum takes more stack than the 2 MiB of a
+    // test thread. The binary parses on its main thread, which has 8 MiB.
+    std::thread::Builder::new()
+        .stack_size(8 << 20)
+        .spawn(msg_action_parses_both_actions)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+fn msg_action_parses_both_actions() {
     use clap::Parser as _;
 
     use crate::cli::{Cli, Msg, Sub};

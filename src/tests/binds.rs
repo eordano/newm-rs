@@ -102,7 +102,7 @@ fn set_up(config: &str) -> (Fixture, ClientId, WlSurface) {
             BoundAction::Both { press, release } => [Some(press), Some(release)],
         };
         for action in actions.into_iter().flatten() {
-            // knuffel doesn't understand #[cfg(test)]...
+            // knus doesn't understand #[cfg(test)]...
             if !matches!(action, Action::Screenshot(_, _)) {
                 *action = Action::TestAction;
             }
