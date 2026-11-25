@@ -16,10 +16,7 @@ use smithay_client_toolkit::session_lock::{
 };
 use smithay_client_toolkit::shm::slot::{Buffer, SlotPool};
 use smithay_client_toolkit::shm::{Shm, ShmHandler};
-use smithay_client_toolkit::{
-    delegate_compositor, delegate_output, delegate_registry, delegate_seat, delegate_session_lock,
-    delegate_shm, registry_handlers,
-};
+use smithay_client_toolkit::{delegate_dispatch2, delegate_registry, registry_handlers};
 use wayland_client::globals::registry_queue_init;
 use wayland_client::protocol::{wl_keyboard, wl_output, wl_seat, wl_shm, wl_surface};
 use wayland_client::{delegate_noop, Connection, Dispatch, Proxy, QueueHandle, WEnum};
@@ -630,11 +627,7 @@ impl ProvidesRegistryState for App {
     registry_handlers![OutputState, SeatState];
 }
 
-delegate_compositor!(App);
-delegate_output!(App);
-delegate_seat!(App);
-delegate_session_lock!(App);
-delegate_shm!(App);
+delegate_dispatch2!(App);
 delegate_registry!(App);
 delegate_noop!(App: WpViewporter);
 delegate_noop!(App: WpViewport);
