@@ -1,0 +1,41 @@
+* {
+  font-family: "DejaVu Sans Mono", "DejaVu Sans", monospace;
+  font-size: 12px;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+window#waybar {
+  background: alpha(#0B0C16, 0.9);
+  color: #ddf7ff;
+}
+
+#custom-term {
+  margin-left: 8px;
+  padding: 0 8px;
+  color: #82FB9C;
+  background: transparent;
+}
+
+#custom-term:hover {
+  background: #1f253a;
+}
+
+#window {
+  color: #6a6e95;
+  padding: 0 14px;
+}
+
+#cpu,
+#memory {
+  padding: 0 10px;
+  color: #ddf7ff;
+}
+
+#clock {
+  padding: 0 10px;
+  margin-right: 8px;
+  color: #ddf7ff;
+}

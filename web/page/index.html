@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>newm-rs in the browser</title>
+    <meta
+      name="description"
+      content="newm-rs, a Wayland compositor with windows on an infinite canvas, running in a Linux guest in your browser tab."
+    />
+    <link rel="stylesheet" href="@css@" />
+    <link rel="icon" href="data:," />
+    <!-- Cross-origin isolation (SharedArrayBuffer) on hosts that cannot set COOP/COEP headers:
+         the service worker adds them and reloads the page once. require-corp, as trynix uses. -->
+    <script>
+      window.coi = { coepCredentialless: () => false };
+    </script>
+    <script src="coi-serviceworker.js"></script>
+    <!-- The xzwasm global (NAR decoding) and xterm-pty's openpty, which the engine links. -->
+    <script src="vendor/xterm-pty.js"></script>
+    <script src="vendor/xzwasm.js"></script>
+  </head>
+  <body data-state="booting">
+    <!-- The guest: its shell's terminal behind, and its windows over it, newm-rs's full screen. -->
+    <div id="console">
+      <div id="console-body">
+        <div id="terminal" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+        <div id="desktop" hidden></div>
+      </div>
+      <div id="keybar" hidden></div>
+      <button type="button" id="sound-control" hidden></button>
+      <button type="button" id="console-windows" hidden></button>
+    </div>
+
+    <div id="boot" role="status" aria-live="polite">
+      <div class="boot-box">
+        <p class="boot-title">
+          newm-rs
+          <span class="boot-variant only-small">small demo</span>
+          <span class="boot-variant only-full">full desktop</span>
+          <span id="boot-elapsed"></span>
+        </p>
+        <div class="boot-track"><div id="boot-bar"></div></div>
+        <p id="boot-stage">Loading…</p>
+        <button type="button" class="boot-details" data-debug-open>details</button>
+      </div>
+    </div>
+
+    <div id="fail" role="alert">
+      <div class="boot-box">
+        <p class="boot-title" id="fail-title"></p>
+        <p id="fail-detail"></p>
+        <pre id="fail-log"></pre>
+        <button type="button" class="boot-details" data-debug-open>details</button>
+      </div>
+    </div>
+
+    <button type="button" id="help-open" aria-controls="help" aria-expanded="false" title="Help">?</button>
+
+    <div id="help" hidden>
+      <section role="dialog" aria-modal="true" aria-labelledby="help-title">
+        <button type="button" id="help-close" aria-label="Close help">×</button>
+        <h1 id="help-title">newm-rs</h1>
+        <p>
+          A Wayland compositor whose windows live on an infinite canvas of tiles, with a camera
+          that pans and zooms over it. Here it runs nested in a Linux guest that runs in this tab:
+          the kernel is compiled to WebAssembly, and newm-rs<span class="only-full">, waybar</span>
+          and the terminals are real aarch64 programs.
+        </p>
+        <p>
+          Click the desktop to give it the keyboard. The Mod key is <kbd>Alt</kbd>, since the
+          host keeps <kbd>Super</kbd>.
+        </p>
+        <table>
+          <tr><td><kbd>Alt</kbd> <kbd>=</kbd> / <kbd>-</kbd>, <kbd>Alt</kbd> + wheel</td><td>zoom in / out</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>0</kbd></td><td>back to 1:1</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>O</kbd></td><td>overview</td></tr>
+          <tr><td><kbd>Alt</kbd> + arrows or <kbd>H J K L</kbd></td><td>focus the next window; the camera follows</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>←</kbd> / <kbd>→</kbd></td><td>send a window to an edge</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Return</kbd><span class="only-full">, or <q>+ term</q> in the bar</span></td><td>a new terminal</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Q</kbd></td><td>close a window</td></tr>
+          <tr><td><kbd>Alt</kbd> <kbd>Z</kbd> / <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>Z</kbd></td><td>undo / redo</td></tr>
+        </table>
+        <p>
+          Every terminal runs tmux and fish<span class="only-full">, with <code>nvim</code> as
+          the editor</span>. tmux's prefix is <kbd>Ctrl</kbd> <kbd>A</kbd>, then <kbd>|</kbd> or
+          <kbd>-</kbd> splits and <kbd>h j k l</kbd> moves between panes.
+          <span class="only-full">@help-note@</span>
+        </p>
+        <p class="variant-note only-small">
+          This is the small demo, about @small-mb@ MB on the first visit. It leaves out the
+          author's waybar, Neovim and Alacritty, which the
+          <a href="?full=1">full version (≈@full-mb@ MB)</a> has.
+        </p>
+        <p class="variant-note only-full">
+          This is the full desktop, about @full-mb@ MB on the first visit. The
+          <a href="./">small version (≈@small-mb@ MB)</a> has newm-rs and its terminals only.
+        </p>
+        <p class="help-hint">Close with <kbd>Esc</kbd>; <kbd>?</kbd> in the corner opens this again.</p>
+        <p class="credits">
+          <a href="https://github.com/eordano/newm-rs">newm-rs on GitHub</a>.
+          The boot is <a href="https://github.com/fzakaria/trynix">trynix</a>'s
+          (<a href="LICENSE-trynix">MIT</a>), on the
+          <a href="https://github.com/pithings/unkernel">unkernel</a> engine (kernel
+          <a href="vendor/unkernel/LICENSE">GPL-2.0</a>, SDK
+          <a href="vendor/unkernel/LICENSE-MIT">MIT</a>); windows are drawn by
+          <a href="https://github.com/pithings/wland">wland</a>
+          (<a href="@gui@/LICENSE-wland">licence</a>). Packages come from
+          <a href="https://cache.nixos.org">cache.nixos.org</a>.
+        </p>
+      </section>
+    </div>
+
+    <!-- Debugging: opens with ?debug=1, from "details", or by itself when no window comes. -->
+    <div id="debug" hidden>
+      <section aria-labelledby="debug-title">
+        <header>
+          <h2 id="debug-title">Debug</h2>
+          <button type="button" id="debug-copy">copy diagnostics</button>
+          <button type="button" id="debug-close" aria-label="Close debug">×</button>
+        </header>
+        <p id="debug-why"></p>
+        <h3>This browser</h3>
+        <pre id="debug-env"></pre>
+        <h3>Downloads in flight</h3>
+        <pre id="debug-inflight"></pre>
+        <h3>Guest: the demo's steps, newm-rs's log, processes</h3>
+        <pre id="debug-guest">(read from the guest once it is at its prompt)</pre>
+        <h3>Page log</h3>
+        <pre id="debug-log"></pre>
+      </section>
+    </div>
+
+    <script type="module" src="@main@"></script>
+  </body>
+</html>

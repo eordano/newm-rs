@@ -1,0 +1,35 @@
+// waybar for the newm-rs browser demo: the guest has no network, battery,
+// bluetooth or D-Bus session, so the bar keeps a terminal launcher, the
+// focused window's title (niri IPC through $NIRI_SOCKET), CPU, memory and the clock.
+{
+  "layer": "top",
+  "position": "top",
+  "height": 26,
+  "spacing": 0,
+  "modules-left": ["custom/term", "niri/window"],
+  "modules-center": [],
+  "modules-right": ["cpu", "memory", "clock"],
+
+  "custom/term": {
+    "format": " + term ",
+    "tooltip": false,
+    "on-click": "@term@"
+  },
+  "niri/window": {
+    "format": "{title}",
+    "max-length": 80,
+    "tooltip": false
+  },
+  "cpu": {
+    "format": "cpu {usage}%",
+    "interval": 5
+  },
+  "memory": {
+    "format": "mem {percentage}%",
+    "interval": 5
+  },
+  "clock": {
+    "format": "{:%A %H:%M}",
+    "tooltip-format": "{:%Y-%m-%d}"
+  }
+}
