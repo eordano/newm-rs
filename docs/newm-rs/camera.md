@@ -27,9 +27,13 @@ shows, the active workspace's rectangle: windows beyond it, other workspaces and
 Bars and other top and overlay layers stay undimmed. `overview-dim` sets how dark, from 0 to 1.
 
 The overview opens and closes by pressing and releasing Mod alone (niri's default config), by a
-tap of Super with `canvas { super-tap-overview }` and through niri's top-left hot corner. No
-touchpad swipe opens it: four fingers up or down zoom the camera instead, which leaves every
-window usable the way it is at any other zoom.
+tap of Super with `canvas { super-tap-overview }` (unless `super-tap-zoom` is set) and through
+niri's top-left hot corner. No touchpad swipe opens it: four fingers up or down zoom the camera
+instead, which leaves every window usable the way it is at any other zoom.
+
+With `canvas { super-tap-zoom 0.33 }`, a Super tap at 1:1 zooms the camera out to the whole
+step nearest that scale (`zoom-step` 0.8: five steps, 0.328), and a tap at any other zoom returns
+it to 1:1. It takes the tap from `super-tap-overview`.
 
 ## Zoom to fit
 

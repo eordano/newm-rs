@@ -20,6 +20,8 @@ mod mod_pan;
 #[cfg(feature = "canvas")]
 mod pinch;
 mod remove_output;
+#[cfg(feature = "canvas")]
+mod super_tap;
 #[cfg(feature = "synth")]
 mod synth;
 mod transactions;

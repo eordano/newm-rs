@@ -18,6 +18,10 @@ pub struct Canvas {
     /// row and its column: `diagonal-weight 1`.
     pub diagonal_weight: f64,
     pub super_tap_overview: bool,
+    /// The camera scale a Super tap at 1:1 zooms out to, as the nearest whole zoom step:
+    /// `super-tap-zoom 0.33`. A tap at any other zoom returns the camera to 1:1. Set, it takes the
+    /// tap from `super-tap-overview`.
+    pub super_tap_zoom: Option<f64>,
     /// Whether confirming a window in the Alt+Tab switcher centres it on screen.
     pub center_on_switch: bool,
     /// How dark the overview draws what lies outside the area the screen shows: the alpha of a
@@ -78,6 +82,7 @@ impl Default for Canvas {
             distance_weight: 0.5,
             diagonal_weight: 1.0,
             super_tap_overview: false,
+            super_tap_zoom: None,
             center_on_switch: false,
             overview_dim: 0.4,
             pan_acceleration: 1.,
@@ -117,6 +122,8 @@ pub struct CanvasPart {
     pub diagonal_weight: Option<FloatOrInt<0, 100>>,
     #[knuffel(child)]
     pub super_tap_overview: Option<Flag>,
+    #[knuffel(child, unwrap(argument))]
+    pub super_tap_zoom: Option<FloatOrInt<0, 16>>,
     #[knuffel(child)]
     pub center_on_switch: Option<Flag>,
     #[knuffel(child, unwrap(argument))]
@@ -169,6 +176,9 @@ impl MergeWith<CanvasPart> for Canvas {
         }
         if let Some(x) = part.super_tap_overview {
             self.super_tap_overview = x.0;
+        }
+        if let Some(x) = part.super_tap_zoom {
+            self.super_tap_zoom = (x.0 > 0.).then_some(x.0);
         }
         if let Some(x) = part.center_on_switch {
             self.center_on_switch = x.0;
@@ -226,6 +236,7 @@ mod tests {
                     distance-weight 0.25
                     diagonal-weight 2
                     super-tap-overview
+                    super-tap-zoom 0.33
                     center-on-switch
                     overview-dim 0.25
                     default-width { fixed 960; }
@@ -264,6 +275,7 @@ mod tests {
                 distance_weight: 0.25,
                 diagonal_weight: 2.0,
                 super_tap_overview: true,
+                super_tap_zoom: Some(0.33),
                 center_on_switch: true,
                 overview_dim: 0.25,
                 pan_acceleration: 1.,

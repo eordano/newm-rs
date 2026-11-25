@@ -46,6 +46,7 @@ layout {
         default-width { proportion 0.5; }
         default-height { fixed 700; }
         super-tap-overview
+        super-tap-zoom 0.33
         center-on-switch
         floating-follow "parent"
         magnified-input
