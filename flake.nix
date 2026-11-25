@@ -3,17 +3,21 @@
   description = "newm-rs: newm's strict tile canvas on niri.";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  # Builds the dependencies as their own derivation, so CI caches them between runs.
+  inputs.crane.url = "github:ipetkov/crane";
 
   outputs =
     {
       self,
       nixpkgs,
+      crane,
     }:
     let
       revision = self.shortRev or self.dirtyShortRev or "unknown";
       newm-rs-package =
         {
           lib,
+          craneLib,
           cairo,
           dbus,
           libGL,
@@ -29,6 +33,7 @@
           pkg-config,
           rustPlatform,
           systemd,
+          systemdLibs,
           wayland,
           withDbus ? true,
           withSystemd ? true,
@@ -41,49 +46,77 @@
           withText ? false,
           # The canvas usage log, for tuning placement; off unless asked for.
           withTelemetry ? false,
+          # The animated synth background (`synth-background { }`), with react-to-sound through
+          # PipeWire; or the background alone, without PipeWire.
+          withSynth ? false,
+          withSynthBackground ? false,
+          # The screen locker, newm-rs-lock, beside the compositor.
+          withLocker ? true,
+          # Run the test suite as part of the build.
+          withTests ? true,
+          # Cargo's profile: "release", or "dev" for a quicker, unstripped debug build.
+          profile ? "release",
         }:
+        let
+          features =
+            lib.optional withCanvas "canvas"
+            ++ lib.optional withDbus "dbus"
+            ++ lib.optional withDinit "dinit"
+            ++ lib.optional withScreencastSupport "xdp-gnome-screencast"
+            ++ lib.optional withSystemd "systemd"
+            ++ lib.optional withText "text"
+            ++ lib.optional withTelemetry "telemetry"
+            ++ lib.optional withSynth "synth"
+            ++ lib.optional (withSynthBackground && !withSynth) "synth-visual";
+          packages = [ "newm-rs" ] ++ lib.optional withLocker "newm-rs-lock";
 
-        rustPlatform.buildRustPackage {
-          pname = "newm-rs";
-          version = revision;
+          # What both the dependencies' build and newm-rs's own share, so that the second reuses
+          # the first's target directory: the same source layout, inputs, features and flags.
+          # The dependencies build from a copy of the source with only the manifests, so their
+          # derivation (and its cache entry) changes only when Cargo.lock or a manifest does.
+          commonArgs = {
+            pname = "newm-rs";
+            version = revision;
 
-          src = lib.fileset.toSource {
-            root = ./.;
-            fileset = lib.fileset.unions [
-              ./niri-config
-              ./niri-ipc
-              ./niri-visual-tests
-              ./newm-canvas
-              ./newm-kde
-              ./newm-rs-lock
-              ./newm-synth
-              ./resources
-              ./src
-              ./Cargo.toml
-              ./Cargo.lock
-              ./build.rs
+            src = lib.fileset.toSource {
+              root = ./.;
+              fileset = lib.fileset.unions [
+                ./niri-config
+                ./niri-ipc
+                ./niri-visual-tests
+                ./newm-canvas
+                ./newm-kde
+                ./newm-rs-lock
+                ./newm-synth
+                ./resources
+                ./src
+                ./Cargo.toml
+                ./Cargo.lock
+                ./build.rs
+              ];
+            };
+
+            strictDeps = true;
+            CARGO_PROFILE = profile;
+
+            cargoExtraArgs = lib.concatStringsSep " " (
+              [
+                "--locked"
+                "--no-default-features"
+              ]
+              ++ lib.optional (features != [ ]) "--features ${lib.concatStringsSep "," features}"
+              ++ map (p: "--package ${p}") packages
+            );
+            # The tests also cover the canvas crate.
+            cargoTestExtraArgs = "--package newm-canvas -- --skip=::egl";
+            doCheck = withTests;
+
+            nativeBuildInputs = [
+              rustPlatform.bindgenHook
+              pkg-config
             ];
-          };
 
-          postPatch = ''
-            patchShebangs resources/newm-rs-session
-          '';
-
-          cargoLock = {
-            # NOTE: This is only used for Git dependencies
-            allowBuiltinFetchGit = true;
-            lockFile = ./Cargo.lock;
-          };
-
-          strictDeps = true;
-
-          nativeBuildInputs = [
-            rustPlatform.bindgenHook
-            pkg-config
-          ];
-
-          buildInputs =
-            [
+            buildInputs = [
               dbus
               libGL
               libdisplay-info_0_3
@@ -100,72 +133,12 @@
               pango
             ]
             ++ lib.optional (withDbus || withScreencastSupport || withSystemd) dbus
-            ++ lib.optional withScreencastSupport pipewire
+            ++ lib.optional (withScreencastSupport || withSynth) pipewire
             # Also includes libudev
-            ++ lib.optional withSystemd systemd;
+            ++ lib.optional withSystemd systemd
+            # libudev alone, which the session backend links without the rest of systemd.
+            ++ lib.optional (!withSystemd) systemdLibs;
 
-          buildFeatures =
-            lib.optional withCanvas "canvas"
-            ++ lib.optional withDbus "dbus"
-            ++ lib.optional withDinit "dinit"
-            ++ lib.optional withScreencastSupport "xdp-gnome-screencast"
-            ++ lib.optional withSystemd "systemd"
-            ++ lib.optional withText "text"
-            ++ lib.optional withTelemetry "telemetry";
-          buildNoDefaultFeatures = true;
-
-          # The compositor and the screen locker; the tests also cover the canvas crate.
-          cargoBuildFlags = [
-            "--package"
-            "newm-rs"
-            "--package"
-            "newm-rs-lock"
-          ];
-          cargoTestFlags = [
-            "--package"
-            "newm-rs"
-            "--package"
-            "newm-rs-lock"
-            "--package"
-            "newm-canvas"
-          ];
-
-          # ever since this commit:
-          # https://github.com/niri-wm/niri/commit/771ea1e81557ffe7af9cbdbec161601575b64d81
-          # niri now runs an actual instance of the real compositor (with a mock backend) during tests
-          # and thus creates a real socket file in the runtime dir.
-          # this is fine for our build, we just need to make sure it has a directory to write to.
-          preCheck = ''
-            export XDG_RUNTIME_DIR="$(mktemp -d)"
-          '';
-
-          checkFlags = [
-            # These tests require the ability to access a "valid EGL Display", but that won't work
-            # inside the Nix sandbox
-            "--skip=::egl"
-          ];
-
-          postInstall = ''
-            install -Dm755 resources/newm-rs-session -t $out/bin
-
-            install -Dm644 resources/niri-portals.conf -t $out/share/xdg-desktop-portal
-            install -Dm644 /dev/stdin $out/share/wayland-sessions/newm-rs.desktop <<EOF
-            [Desktop Entry]
-            Name=newm-rs
-            Comment=newm's tile canvas on niri
-            Exec=$out/bin/newm-rs-session
-            Type=Application
-            DesktopNames=niri;KDE
-            EOF
-          ''
-          + lib.optionalString withSystemd ''
-            sed -e "s|^ExecStart=newm-rs --session|ExecStart=$out/bin/newm-rs --session|" \
-                resources/newm-rs.service > newm-rs.service
-            install -Dm644 newm-rs.service -t $out/lib/systemd/user
-            install -Dm644 resources/newm-rs-shutdown.target -t $out/lib/systemd/user
-          '';
-
-          env = {
             # Force linking with libEGL and libwayland-client so they end up in RPATH and
             # can be discovered by `dlopen()`
             RUSTFLAGS = toString (
@@ -176,21 +149,67 @@
                 "-Wl,--pop-state"
               ]
             );
+          };
+
+          # A fixed version: the commit would change the dependencies' derivation on every commit.
+          cargoArtifacts = craneLib.buildDepsOnly (commonArgs // { version = "0"; });
+        in
+        craneLib.buildPackage (
+          commonArgs
+          // {
+            inherit cargoArtifacts;
+
+            postPatch = ''
+              patchShebangs resources/newm-rs-session
+            '';
+
+            # ever since this commit:
+            # https://github.com/niri-wm/niri/commit/771ea1e81557ffe7af9cbdbec161601575b64d81
+            # niri now runs an actual instance of the real compositor (with a mock backend) during
+            # tests and thus creates a real socket file in the runtime dir.
+            # this is fine for our build, we just need to make sure it has a directory to write to.
+            preCheck = ''
+              export XDG_RUNTIME_DIR="$(mktemp -d)"
+            '';
+
+            postInstall = ''
+              install -Dm755 resources/newm-rs-session -t $out/bin
+
+              install -Dm644 resources/niri-portals.conf -t $out/share/xdg-desktop-portal
+              install -Dm644 /dev/stdin $out/share/wayland-sessions/newm-rs.desktop <<EOF
+              [Desktop Entry]
+              Name=newm-rs
+              Comment=newm's tile canvas on niri
+              Exec=$out/bin/newm-rs-session
+              Type=Application
+              DesktopNames=niri;KDE
+              EOF
+            ''
+            + lib.optionalString withSystemd ''
+              sed -e "s|^ExecStart=newm-rs --session|ExecStart=$out/bin/newm-rs --session|" \
+                  resources/newm-rs.service > newm-rs.service
+              install -Dm644 newm-rs.service -t $out/lib/systemd/user
+              install -Dm644 resources/newm-rs-shutdown.target -t $out/lib/systemd/user
+            '';
+
+            dontStrip = profile != "release";
+
             NIRI_BUILD_COMMIT = revision;
-          };
 
-          passthru = {
-            providedSessions = [ "newm-rs" ];
-          };
+            passthru = {
+              providedSessions = [ "newm-rs" ];
+              inherit cargoArtifacts;
+            };
 
-          meta = {
-            description = "newm's strict tile canvas on niri";
-            homepage = "https://github.com/eordano/newm-rs";
-            license = lib.licenses.gpl3Only;
-            mainProgram = "newm-rs";
-            platforms = lib.platforms.linux;
-          };
-        };
+            meta = {
+              description = "newm's strict tile canvas on niri";
+              homepage = "https://github.com/eordano/newm-rs";
+              license = lib.licenses.gpl3Plus;
+              mainProgram = "newm-rs";
+              platforms = lib.platforms.linux;
+            };
+          }
+        );
 
       inherit (nixpkgs) lib;
       # Support all Linux systems that the nixpkgs flake exposes
@@ -269,7 +288,8 @@
       packages = forAllSystems (
         system:
         let
-          newm-rs = nixpkgsFor.${system}.callPackage newm-rs-package { };
+          pkgs = nixpkgsFor.${system};
+          newm-rs = pkgs.callPackage newm-rs-package { craneLib = crane.mkLib pkgs; };
         in
         {
           inherit newm-rs;
@@ -279,23 +299,14 @@
           # It is primarily to help with quickly iterating on
           # changes made to the above expression - though it is
           # also not stripped in order to better debug newm-rs itself
-          newm-rs-debug = newm-rs.overrideAttrs (
-            newAttrs: oldAttrs: {
-              pname = oldAttrs.pname + "-debug";
-
-              cargoBuildType = "debug";
-              cargoCheckType = newAttrs.cargoBuildType;
-
-              dontStrip = true;
-            }
-          );
+          newm-rs-debug = newm-rs.override { profile = "dev"; };
 
           default = newm-rs;
         }
       );
 
       overlays.default = final: _: {
-        newm-rs = final.callPackage newm-rs-package { };
+        newm-rs = final.callPackage newm-rs-package { craneLib = crane.mkLib final; };
       };
     };
 }
