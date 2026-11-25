@@ -403,15 +403,51 @@ function watchWindow(waiting) {
       opened = true;
       windowOpened = true;
       clearInterval(waiting);
-      say("Running", 1);
-      document.body.dataset.state = "running";
       log(`newm-rs window after ${((performance.now() - started) / 1000).toFixed(1)} s`);
-      if (!helpOpen()) {
-        win.raise();
-      }
+      say("Opening the terminal…", 0.97);
+      revealWithAnApp(win);
     }
   }, 300);
   return timer;
+}
+
+// The desktop shows only once newm-rs has an app on it: an empty canvas is no first sight. newm-rs
+// is asked over its IPC how many windows it has, every 1.5 s, until one; if it never says (its
+// socket, the guest's shell), the desktop shows after 90 s anyway.
+const NIRI_WINDOWS =
+  "NIRI_SOCKET=$(ls /run/user/*/niri.wayland-*.sock 2>/dev/null | grep -v floating | head -n 1) " +
+  "newm-rs msg -j windows 2>/dev/null";
+
+async function revealWithAnApp(win) {
+  const since = performance.now();
+  for (;;) {
+    let count = null;
+    try {
+      const result = await Promise.race([
+        window.trynix.run(NIRI_WINDOWS),
+        new Promise((resolve) => setTimeout(() => resolve(null), 10000)),
+      ]);
+      const windows = JSON.parse(result?.output ?? "null");
+      count = Array.isArray(windows) ? windows.length : null;
+    } catch {
+      // Not answering yet: newm-rs is still starting, or the guest's shell is busy.
+    }
+    const waited = (performance.now() - since) / 1000;
+    if (count > 0 || waited > 90) {
+      log(
+        count > 0
+          ? `first app on the desktop ${waited.toFixed(1)} s after newm-rs's window`
+          : "no app on the desktop 90 s after newm-rs's window; showing it anyway",
+      );
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  say("Running", 1);
+  document.body.dataset.state = "running";
+  if (!helpOpen()) {
+    win.raise();
+  }
 }
 
 // The debug panel: what this browser is, what the page waits on, the guest's own logs and the
