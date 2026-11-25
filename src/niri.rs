@@ -471,7 +471,7 @@ pub struct Niri {
 
     pub screenshot_ui: ScreenshotUi,
     /// newm's synth background, drawn in front of the backdrop.
-    #[cfg(feature = "synth")]
+    #[cfg(feature = "synth-visual")]
     pub synth: crate::synth::Synth,
     pub config_error_notification: ConfigErrorNotification,
     pub hotkey_overlay: HotkeyOverlay,
@@ -970,7 +970,7 @@ impl State {
         self.niri.refresh_a11y();
 
         // After everything that can lock, blank, cover or uncover an output.
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         self.niri.synth_refresh();
     }
 
@@ -2003,7 +2003,7 @@ impl State {
             xwls_changed = true;
         }
 
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         let synth_changed = (config.synth_background != old_config.synth_background)
             .then(|| config.synth_background.mode != old_config.synth_background.mode);
 
@@ -2016,7 +2016,7 @@ impl State {
         // Release the borrow.
         drop(old_config);
 
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         if let Some(mode_changed) = synth_changed {
             if mode_changed {
                 self.niri.synth.config_mode_changed();
@@ -3118,7 +3118,7 @@ impl Niri {
         let mods_with_tablet_stylus_binds = mods_with_tablet_stylus_binds(mod_key, &config_.binds);
 
         let screenshot_ui = ScreenshotUi::new(animation_clock.clone(), config.clone());
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         let synth = crate::synth::Synth::new(&config_.synth_background);
         let window_mru_ui = WindowMruUi::new(config.clone());
         let config_error_notification =
@@ -3337,7 +3337,7 @@ impl Niri {
             locked_hint: None,
 
             screenshot_ui,
-            #[cfg(feature = "synth")]
+            #[cfg(feature = "synth-visual")]
             synth,
             config_error_notification,
             hotkey_overlay,
@@ -4895,7 +4895,7 @@ impl Niri {
             );
         }
         self.idle_notifier_state.set_is_inhibited(is_inhibited);
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         {
             self.synth.idle_inhibited = is_inhibited;
         }
@@ -5333,7 +5333,7 @@ impl Niri {
         push_popups_from_layer!(Layer::Background, true);
         push_normal_from_layer!(Layer::Background, true);
 
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         if let Some(elem) = self.synth_element(ctx.renderer.as_gles_renderer(), output) {
             push(elem.into());
         }
@@ -5342,7 +5342,7 @@ impl Niri {
     }
 
     /// The synth background for `output`, sized to it, or `None` while it is off.
-    #[cfg(feature = "synth")]
+    #[cfg(feature = "synth-visual")]
     fn synth_element(
         &self,
         renderer: &mut GlesRenderer,
@@ -5357,7 +5357,7 @@ impl Niri {
     }
 
     /// The copy of the synth background blurred windows see, or `None` while it is off.
-    #[cfg(feature = "synth")]
+    #[cfg(feature = "synth-visual")]
     fn synth_xray_element(
         &self,
         renderer: &mut GlesRenderer,
@@ -5425,7 +5425,7 @@ impl Niri {
             );
             // The synth background sits behind the backdrop layers, so blur sees it too: a copy
             // that follows the picture once a second, so the blur is not redone every frame.
-            #[cfg(feature = "synth")]
+            #[cfg(feature = "synth-visual")]
             if let Some(elem) = self.synth_xray_element(ctx.renderer, output) {
                 elements.push(elem.into());
             }
@@ -5532,7 +5532,7 @@ impl Niri {
         self.clock.set_unadjusted(target_presentation_time);
 
         // Move the synth background to the frame's presentation time.
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         self.synth_advance(output, target_presentation_time);
 
         self.update_render_elements(Some(output));
@@ -5566,7 +5566,7 @@ impl Niri {
         }
 
         // Keep frames coming while the synth background moves on this output.
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         if self.synth_after_render(output, target_presentation_time) && self.monitors_active {
             let state = self.output_state.get_mut(output).unwrap();
             state.unfinished_animations_remain = true;
@@ -7979,7 +7979,7 @@ impl Niri {
         let _span = tracy_client::span!("Niri::notify_activity");
 
         self.idle_notifier_state.notify_activity(&self.seat);
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         self.synth.input(get_monotonic_time());
         #[cfg(feature = "dbus")]
         self.screen_saver_activity.input();

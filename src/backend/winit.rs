@@ -331,7 +331,7 @@ impl Winit {
         let mut elements = niri.render_to_vec(ctx, output, true);
 
         // How much of the output the synth background shows decides whether it keeps moving.
-        #[cfg(feature = "synth")]
+        #[cfg(feature = "synth-visual")]
         niri.synth_measure(output, &elements);
 
         // Visualize the damage, if enabled.

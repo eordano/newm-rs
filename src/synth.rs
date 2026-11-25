@@ -125,6 +125,7 @@ impl Default for Synth {
 #[derive(Debug)]
 enum SoundHandle {
     /// Held for its `Drop`, which disconnects the stream.
+    #[cfg(feature = "synth")]
     #[cfg_attr(test, allow(dead_code))]
     PipeWire(#[allow(dead_code)] sound::Sound),
     #[cfg(test)]
@@ -1065,16 +1066,23 @@ fn open_sound(
         let _ = (event_loop, peak);
         Ok(SoundHandle::Fake)
     }
-    #[cfg(not(test))]
+    #[cfg(all(not(test), feature = "synth"))]
     {
         Ok(SoundHandle::PipeWire(sound::open(
             event_loop.clone(),
             peak,
         )?))
     }
+    // Built with the background alone (synth-visual): nothing to listen with.
+    #[cfg(all(not(test), not(feature = "synth")))]
+    {
+        let _ = (event_loop, peak);
+        anyhow::bail!("built without sound: react-to-sound needs the synth feature")
+    }
 }
 
 mod power;
+#[cfg(feature = "synth")]
 mod sound;
 #[cfg(test)]
 mod tests;

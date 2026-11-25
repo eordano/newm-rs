@@ -23,7 +23,7 @@ pub mod rubber_band;
 pub mod screencasting;
 #[cfg(feature = "canvas")]
 pub mod session;
-#[cfg(feature = "synth")]
+#[cfg(feature = "synth-visual")]
 pub mod synth;
 pub mod ui;
 pub mod utils;
