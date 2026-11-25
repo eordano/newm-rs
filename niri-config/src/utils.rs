@@ -2,7 +2,7 @@ use std::env::home_dir;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use knuffel::errors::DecodeError;
+use knus::errors::DecodeError;
 use miette::miette;
 use regex::Regex;
 
@@ -24,8 +24,8 @@ pub struct FloatOrInt<const MIN: i32, const MAX: i32>(pub f64);
 /// - (missing): unset, `None`
 /// - just `field`: set, `Some(true)`
 /// - explicitly `field true` or `field false`: set, `Some(true)` or `Some(false)`
-#[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Flag(#[knuffel(argument, default = true)] pub bool);
+#[derive(knus::Decode, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Flag(#[knus(argument, default = true)] pub bool);
 
 /// `Regex` that implements `PartialEq` by its string form.
 #[derive(Debug, Clone)]
@@ -76,12 +76,12 @@ impl MergeWith<Flag> for bool {
     }
 }
 
-impl<S: knuffel::traits::ErrorSpan, const MIN: i32, const MAX: i32> knuffel::DecodeScalar<S>
+impl<S: knus::traits::ErrorSpan, const MIN: i32, const MAX: i32> knus::DecodeScalar<S>
     for FloatOrInt<MIN, MAX>
 {
     fn type_check(
-        type_name: &Option<knuffel::span::Spanned<knuffel::ast::TypeName, S>>,
-        ctx: &mut knuffel::decode::Context<S>,
+        type_name: &Option<knus::span::Spanned<knus::ast::TypeName, S>>,
+        ctx: &mut knus::decode::Context<S>,
     ) {
         if let Some(type_name) = &type_name {
             ctx.emit_error(DecodeError::unexpected(
@@ -93,11 +93,11 @@ impl<S: knuffel::traits::ErrorSpan, const MIN: i32, const MAX: i32> knuffel::Dec
     }
 
     fn raw_decode(
-        val: &knuffel::span::Spanned<knuffel::ast::Literal, S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        val: &knus::span::Spanned<knus::ast::Literal, S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         match &**val {
-            knuffel::ast::Literal::Int(value) => match value.try_into() {
+            knus::ast::Literal::Int(value) => match value.try_into() {
                 Ok(v) => {
                     if (MIN..=MAX).contains(&v) {
                         Ok(FloatOrInt(f64::from(v)))
@@ -114,7 +114,7 @@ impl<S: knuffel::traits::ErrorSpan, const MIN: i32, const MAX: i32> knuffel::Dec
                     Ok(FloatOrInt::default())
                 }
             },
-            knuffel::ast::Literal::Decimal(value) => match value.try_into() {
+            knus::ast::Literal::Decimal(value) => match value.try_into() {
                 Ok(v) => {
                     if (f64::from(MIN)..=f64::from(MAX)).contains(&v) {
                         Ok(FloatOrInt(v))
@@ -142,11 +142,9 @@ impl<S: knuffel::traits::ErrorSpan, const MIN: i32, const MAX: i32> knuffel::Dec
     }
 }
 
-pub fn expect_only_children<S>(
-    node: &knuffel::ast::SpannedNode<S>,
-    ctx: &mut knuffel::decode::Context<S>,
-) where
-    S: knuffel::traits::ErrorSpan,
+pub fn expect_only_children<S>(node: &knus::ast::SpannedNode<S>, ctx: &mut knus::decode::Context<S>)
+where
+    S: knus::traits::ErrorSpan,
 {
     if let Some(type_name) = &node.type_name {
         ctx.emit_error(DecodeError::unexpected(
@@ -173,17 +171,17 @@ pub fn expect_only_children<S>(
     }
 }
 
-pub fn parse_arg_node<S: knuffel::traits::ErrorSpan, T: knuffel::traits::DecodeScalar<S>>(
+pub fn parse_arg_node<S: knus::traits::ErrorSpan, T: knus::traits::DecodeScalar<S>>(
     name: &str,
-    node: &knuffel::ast::SpannedNode<S>,
-    ctx: &mut knuffel::decode::Context<S>,
+    node: &knus::ast::SpannedNode<S>,
+    ctx: &mut knus::decode::Context<S>,
 ) -> Result<T, DecodeError<S>> {
     let mut iter_args = node.arguments.iter();
     let val = iter_args.next().ok_or_else(|| {
         DecodeError::missing(node, format!("additional argument `{name}` is required"))
     })?;
 
-    let value = knuffel::traits::DecodeScalar::decode(val, ctx)?;
+    let value = knus::traits::DecodeScalar::decode(val, ctx)?;
 
     if let Some(val) = iter_args.next() {
         ctx.emit_error(DecodeError::unexpected(
@@ -210,10 +208,10 @@ pub fn parse_arg_node<S: knuffel::traits::ErrorSpan, T: knuffel::traits::DecodeS
     Ok(value)
 }
 
-pub fn expand_home_path<T, S: knuffel::traits::ErrorSpan>(
+pub fn expand_home_path<T, S: knus::traits::ErrorSpan>(
     path: PathBuf,
-    spanned: &knuffel::span::Spanned<T, S>,
-    ctx: &mut knuffel::decode::Context<S>,
+    spanned: &knus::span::Spanned<T, S>,
+    ctx: &mut knus::decode::Context<S>,
 ) -> Result<PathBuf, DecodeError<S>> {
     if let Ok(rest) = path.strip_prefix("~") {
         let Some(home) = home_dir() else {

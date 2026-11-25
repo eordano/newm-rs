@@ -1,4 +1,4 @@
-use knuffel::errors::DecodeError;
+use knus::errors::DecodeError;
 use smithay::input::keyboard::Keysym;
 
 use crate::utils::{expect_only_children, MergeWith};
@@ -27,21 +27,21 @@ impl Default for RecentWindows {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, PartialEq)]
+#[derive(knus::Decode, Debug, Default, PartialEq)]
 pub struct RecentWindowsPart {
-    #[knuffel(child)]
+    #[knus(child)]
     pub on: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub debounce_ms: Option<u16>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_delay_ms: Option<u16>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub highlight: Option<MruHighlightPart>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub previews: Option<MruPreviewsPart>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub binds: Option<MruBinds>,
 }
 
@@ -84,15 +84,15 @@ impl Default for MruHighlight {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, PartialEq)]
+#[derive(knus::Decode, Debug, Default, PartialEq)]
 pub struct MruHighlightPart {
-    #[knuffel(child)]
+    #[knus(child)]
     pub active_color: Option<Color>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub urgent_color: Option<Color>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub padding: Option<FloatOrInt<0, 65535>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub corner_radius: Option<FloatOrInt<0, 65535>>,
 }
 
@@ -118,11 +118,11 @@ impl Default for MruPreviews {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, PartialEq)]
+#[derive(knus::Decode, Debug, Default, PartialEq)]
 pub struct MruPreviewsPart {
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub max_height: Option<FloatOrInt<1, 65535>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub max_scale: Option<FloatOrInt<0, 1>>,
 }
 
@@ -166,7 +166,7 @@ pub enum MruDirection {
     Backward,
 }
 
-#[derive(knuffel::DecodeScalar, Clone, Copy, Debug, Default, PartialEq)]
+#[derive(knus::DecodeScalar, Clone, Copy, Debug, Default, PartialEq)]
 pub enum MruScope {
     /// All windows.
     #[default]
@@ -177,25 +177,25 @@ pub enum MruScope {
     Workspace,
 }
 
-#[derive(knuffel::DecodeScalar, Clone, Copy, Debug, Default, PartialEq)]
+#[derive(knus::DecodeScalar, Clone, Copy, Debug, Default, PartialEq)]
 pub enum MruFilter {
     /// All windows.
     #[default]
-    #[knuffel(skip)]
+    #[knus(skip)]
     All,
     /// Windows with the same app id as the active window.
     AppId,
 }
 
-#[derive(knuffel::Decode, Debug, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Clone, PartialEq)]
 pub enum MruAction {
     NextWindow(
-        #[knuffel(property(name = "scope"))] Option<MruScope>,
-        #[knuffel(property(name = "filter"), default)] MruFilter,
+        #[knus(property(name = "scope"))] Option<MruScope>,
+        #[knus(property(name = "filter"), default)] MruFilter,
     ),
     PreviousWindow(
-        #[knuffel(property(name = "scope"))] Option<MruScope>,
-        #[knuffel(property(name = "filter"), default)] MruFilter,
+        #[knus(property(name = "scope"))] Option<MruScope>,
+        #[knus(property(name = "filter"), default)] MruFilter,
     ),
 }
 
@@ -251,17 +251,17 @@ fn default_binds() -> Vec<Bind> {
     rv
 }
 
-impl<S> knuffel::Decode<S> for MruBinds
+impl<S> knus::Decode<S> for MruBinds
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         expect_only_children(node, ctx);
 
-        let mut nodes: Vec<&knuffel::ast::SpannedNode<S>> = Vec::new();
+        let mut nodes: Vec<&knus::ast::SpannedNode<S>> = Vec::new();
         let mut binds: Vec<MruBind> = Vec::new();
 
         for child in node.children() {
@@ -303,13 +303,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for MruBind
+impl<S> knus::Decode<S> for MruBind
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         if let Some(type_name) = &node.type_name {
             ctx.emit_error(DecodeError::unexpected(
@@ -359,10 +359,10 @@ where
         for (name, val) in &node.properties {
             match &***name {
                 "allow-inhibiting" => {
-                    allow_inhibiting = knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                    allow_inhibiting = knus::traits::DecodeScalar::decode(val, ctx)?;
                 }
                 "hotkey-overlay-title" => {
-                    hotkey_overlay_title = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?);
+                    hotkey_overlay_title = Some(knus::traits::DecodeScalar::decode(val, ctx)?);
                 }
                 name_str => {
                     ctx.emit_error(DecodeError::unexpected(

@@ -65,28 +65,28 @@ macro_rules! synth_knobs {
             }
         }
 
-        #[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+        #[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
         pub struct SynthBackgroundPart {
-            #[knuffel(child, unwrap(argument, str))]
+            #[knus(child, unwrap(argument, str))]
             pub mode: Option<SynthMode>,
-            #[knuffel(child, unwrap(argument))]
+            #[knus(child, unwrap(argument))]
             pub max_fps: Option<FloatOrInt<1, 1000>>,
-            #[knuffel(child, unwrap(argument, str))]
+            #[knus(child, unwrap(argument, str))]
             pub on_battery: Option<SynthOnBattery>,
-            #[knuffel(child, unwrap(argument))]
+            #[knus(child, unwrap(argument))]
             pub on_battery_max_fps: Option<FloatOrInt<1, 1000>>,
-            #[knuffel(child, unwrap(argument))]
+            #[knus(child, unwrap(argument))]
             pub idle_still_after: Option<FloatOrInt<0, 86400>>,
-            #[knuffel(child)]
+            #[knus(child)]
             pub react_to_sound: Option<crate::utils::Flag>,
-            #[knuffel(child, unwrap(argument))]
+            #[knus(child, unwrap(argument))]
             pub seed: Option<u32>,
             $(
-                #[knuffel(child, unwrap(argument))]
+                #[knus(child, unwrap(argument))]
                 pub $f: Option<FloatOrInt<{ $min }, { $max }>>,
             )*
             $(
-                #[knuffel(child)]
+                #[knus(child)]
                 pub $c: Option<Color>,
             )*
         }

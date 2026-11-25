@@ -186,7 +186,7 @@ overflow-checks = true
 lto = "thin"
 
 [profile.release.package.niri-config]
-# knuffel with chomsky generates a metric ton of debuginfo.
+# knus with chumsky generates a metric ton of debuginfo.
 debug = false
 
 [profile.dev.package]
