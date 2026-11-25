@@ -1,0 +1,54 @@
+# Builds the browser demo (web/flake.nix) and deploys it to GitHub Pages. Run by hand from the
+# Actions tab; it needs Settings > Pages > Source set to "GitHub Actions".
+name: Web demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'eordano/newm-rs'
+    # The guest runs aarch64 programs, so the demo's packages build natively on an arm runner.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          show-progress: false
+
+      - uses: DeterminateSystems/nix-installer-action@main
+
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build the site
+        run: nix build ./web#site -L
+
+      - name: Copy the site out of the store
+        run: |
+          cp -rL result _site
+          chmod -R u+w _site
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      pages: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
