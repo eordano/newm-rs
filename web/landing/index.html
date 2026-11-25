@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>newm-rs: why have workspaces when you can have an infinite canvas?</title>
+<meta name="description" content="newm-rs is a Wayland compositor, a fork of niri, whose windows live on a strict 2D tile canvas with a camera that pans and zooms. Try it in your browser: a real Linux guest boots in the tab.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f6f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="newm-rs: why have workspaces when you can have an infinite canvas?">
+<meta property="og:description" content="A Wayland compositor with a strict 2D tile canvas and a camera that pans and zooms. A fork of niri. Try it in your browser.">
+<link rel="icon" href="img/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,400..800&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="plan.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap top-in">
+    <a class="mark" href="./" aria-label="newm-rs home">
+      <svg class="mark-glyph" viewBox="0 0 32 22" aria-hidden="true"><rect class="mg-w" x="4" y="4" width="11" height="7"/><rect class="mg-w" x="17" y="4" width="11" height="7"/><rect class="mg-w" x="4" y="13" width="24" height="5"/><path class="mg-c" d="M1 6V1h5M26 1h5v5M31 16v5h-5M6 21H1v-5"/></svg>
+      <span>newm-rs</span>
+    </a>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#keys">Keyboard</a></li>
+        <li><a href="#browser">In your browser</a></li>
+        <li><a href="#install">Install</a></li>
+      </ul>
+    </nav>
+    <a class="gh" href="https://github.com/eordano/newm-rs">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.06-.49.06-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.33.67.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      <span>GitHub</span>
+    </a>
+    <a class="nav-try" href="try/">Try it now <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></a>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap hero-in">
+    <div class="hero-copy">
+      <h1 id="hero-title">Why have workspaces when you can have <span>an infinite canvas?</span></h1>
+      <p class="lede">newm-rs is a Wayland compositor where every window owns whole tiles of an
+        endless 2D grid. Tiled windows never overlap, and a camera pans and zooms over them without
+        resizing a single app.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="try/">
+          <span class="btn-label">Try it in your browser</span>
+          <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg>
+        </a>
+        <a class="btn btn-secondary" href="try/?full=1">
+          <span class="btn-label">Full desktop</span>
+        </a>
+      </div>
+      <p class="cta-note">Boots a real Linux guest in this tab, with nothing to install.
+        Small demo <b class="nowrap">@small-mb@&nbsp;MB</b>, full desktop with waybar, Neovim and
+        Alacritty <b class="nowrap">@full-mb@&nbsp;MB</b>.</p>
+      <p class="fork-note">A fork of <a href="https://github.com/niri-wm/niri">niri</a>, inspired by
+        <a href="https://github.com/jbuchermn/newm">newm</a> and KDE. Free software, GPL-3.0-or-later.</p>
+    </div>
+
+    <figure class="hero-media">
+      <div class="dim dim-top" aria-hidden="true"><span>one screen, one camera</span></div>
+      <div class="viewport">
+        <picture>
+          <source media="(prefers-reduced-motion: reduce)" srcset="img/loop-still.webp">
+          <source media="(max-width: 760px)" srcset="img/loop-640.webp">
+          <img src="img/loop-960.webp" width="960" height="540" fetchpriority="high"
+               alt="newm-rs: windows rearranging on a strict 2D tile canvas while the camera pans and zooms, replayed from a real session">
+        </picture>
+        <i class="crop tl" aria-hidden="true"></i><i class="crop tr" aria-hidden="true"></i>
+        <i class="crop bl" aria-hidden="true"></i><i class="crop br" aria-hidden="true"></i>
+      </div>
+      <div class="scale" aria-hidden="true">
+        <ol>
+          <li>−2</li><li>−1</li><li class="on">0 · 1:1</li><li>1</li><li>2</li><li>3</li><li>4</li>
+        </ol>
+        <span class="scale-cap">zoom levels · each step draws at 0.8×</span>
+      </div>
+      <figcaption>Replayed from a real session. <a class="rm-only" href="img/loop-960.webp">Play the loop</a></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="notes" aria-labelledby="notes-title">
+  <div class="wrap">
+    <div class="notes-head">
+      <h2 id="notes-title">Twelve principles. Six that change your day.</h2>
+      <a class="more" href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/principles.md">All twelve, and what each means in practice</a>
+    </div>
+    <ol class="note-list">
+      <li value="1"><h3>Tiled windows never overlap other tiled windows.</h3>
+        <p>Every window owns a rectangle of tiles and no two share one. When a window grows or moves,
+          its neighbours step aside. Nothing is ever covered.</p></li>
+      <li value="3"><h3>Zoom is a camera.</h3>
+        <p>Zooming changes how the canvas is drawn, not the windows. No app is resized or redraws
+          because you zoomed. One action returns to 1:1.</p></li>
+      <li value="4"><h3>Changing focus moves the camera as little as possible.</h3>
+        <p>The view slides just far enough to show the focused window whole. A window already on
+          screen gets focus with no camera motion at all.</p></li>
+      <li value="5"><h3>Moving the mouse without a click changes nothing.</h3>
+        <p>Sweep the pointer across the screen: focus, layout and camera stay where they are.
+          Focus changes on a click.</p></li>
+      <li value="6"><h3>Everything the mouse can do, the keyboard can do too.</h3>
+        <p>Drag, swap, resize, pan and zoom all have bindable actions, and both go through the same
+          placement rules, so they land on the same tiles.</p></li>
+      <li value="9"><h3>As fast and as stable as possible.</h3>
+        <p>The layout is a small integer grid searched with a range tree: over 2,612 real
+          operations, the median takes 46&nbsp;µs. Disk writes never block the screen.</p></li>
+    </ol>
+  </div>
+</section>
+
+<aside class="try-strip" aria-label="Try newm-rs">
+  <div class="wrap try-strip-in">
+    <p>Principles read better under your own hands.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="try/"><span class="btn-label">Try it now</span> <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></a>
+      <a class="btn btn-secondary" href="try/?full=1"><span class="btn-label">Full desktop</span></a>
+    </div>
+    <p class="try-strip-note">A real Linux guest boots in this tab: @small-mb@ MB, nothing to install.</p>
+  </div>
+</aside>
+
+<section class="sheet" id="how" aria-labelledby="how-title">
+  <div class="wrap">
+    <header class="sheet-head">
+      <h2 id="how-title">A plan for your windows, and a camera to look at it.</h2>
+      <p>The canvas is an unbounded grid of tiles, 720&nbsp;×&nbsp;465 logical pixels each by default.
+        Each tiled window spans whole tiles, drawn 1:1 at its own size. Your screen shows part of
+        that plan through a camera, and the tiles at its edges show in part.</p>
+    </header>
+
+    <div class="plan" data-plan>
+      <div class="plan-board">
+        <svg class="plan-svg" viewBox="0 0 1008 465" role="img" aria-labelledby="plan-svg-t">
+          <title id="plan-svg-t">A diagram of the tile canvas: eight windows on whole tiles, with the camera's rectangle over part of it</title>
+          <defs>
+            <pattern id="tile" width="72" height="46.5" patternUnits="userSpaceOnUse">
+              <path d="M72 0H0V46.5" class="tile-line"/>
+            </pattern>
+          </defs>
+          <g id="plan-content">
+              <rect class="plan-ground" x="0" y="0" width="1008" height="465"/>
+              <rect x="0" y="0" width="1008" height="465" fill="url(#tile)"/>
+              <g class="wins">
+                <g class="win is-focus" data-win="terminal" data-r="3,2,2,2"><rect x="219" y="96" width="138" height="87"/><text x="229" y="116">terminal</text></g>
+                <g class="win" data-win="notes" data-r="5,2,1,1"><rect x="363" y="96" width="66" height="40.5"/><text x="371" y="116">notes</text></g>
+                <g class="win" data-win="music" data-r="5,3,1,1"><rect x="363" y="142.5" width="66" height="40.5"/><text x="371" y="162.5">music</text></g>
+                <g class="win" data-win="browser" data-r="6,1,2,3"><rect x="435" y="49.5" width="138" height="133.5"/><text x="445" y="69.5">browser</text></g>
+                <g class="win" data-win="editor" data-r="3,4,3,1"><rect x="219" y="189" width="210" height="40.5"/><text x="229" y="209">editor</text></g>
+                <g class="win" data-win="files" data-r="10,1,2,2"><rect x="723" y="49.5" width="138" height="87"/><text x="733" y="69.5">files</text></g>
+                <g class="win" data-win="mail" data-r="10,3,1,1"><rect x="723" y="142.5" width="66" height="40.5"/><text x="731" y="162.5">mail</text></g>
+                <g class="win" data-win="chat" data-r="1,6,2,2"><rect x="75" y="282" width="138" height="87"/><text x="85" y="302">chat</text></g>
+              </g>
+          </g>
+          <path class="cam-shade" data-cam-shade fill-rule="evenodd" d="M0 0H1008V465H0Z M192 72H444V213.75H192Z"/>
+          <g class="cam" data-cam>
+            <rect class="cam-rect" data-cam-rect x="192" y="72" width="252" height="141.75"/>
+            <text class="cam-label" data-cam-label x="192" y="66">camera · 1:1</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="plan-side">
+        <div class="screen">
+          <svg class="screen-svg" data-screen viewBox="192 72 252 141.75" preserveAspectRatio="xMidYMid slice" role="img" aria-label="What the screen shows through the camera">
+            <use href="#plan-content"/>
+          </svg>
+          <span class="screen-label">the screen</span>
+        </div>
+
+        <div class="controls" data-controls hidden>
+          <div class="ctl-group" role="group" aria-label="Zoom">
+            <button type="button" data-act="out" aria-label="Zoom out">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
+            <button type="button" data-act="reset" class="ctl-wide">1:1</button>
+            <button type="button" data-act="in" aria-label="Zoom in">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M8 3v10"/></svg></button>
+          </div>
+          <div class="ctl-group ctl-dpad" role="group" aria-label="Focus the next window">
+            <button type="button" data-act="left" aria-label="Focus the window to the left">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg></button>
+            <button type="button" data-act="up" aria-label="Focus the window above">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 10l5-5 5 5"/></svg></button>
+            <button type="button" data-act="down" aria-label="Focus the window below">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg></button>
+            <button type="button" data-act="right" aria-label="Focus the window to the right">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></button>
+          </div>
+        </div>
+
+        <dl class="readout" data-readout aria-live="polite">
+          <div><dt>zoom level</dt><dd data-o="level">0</dd></div>
+          <div><dt>drawn at</dt><dd data-o="scale">1.00×</dd></div>
+          <div><dt>focused</dt><dd data-o="focus">terminal</dd></div>
+          <div><dt>camera moved</dt><dd data-o="moved">0 tiles</dd></div>
+          <div class="hl"><dt>windows resized</dt><dd>0</dd></div>
+        </dl>
+        <p class="plan-hint" data-hint hidden>Click a window, or use the arrows: the camera slides only as far as it must. Zoom never touches a window.</p>
+        <p class="plan-hint plan-nojs">A diagram of the rules in the docs, not a screenshot.</p>
+      </div>
+    </div>
+
+    <div class="cols3">
+      <article class="step">
+        <h3>Zoom is a camera</h3>
+        <p>Seven levels, from closer than 1:1 to far out. Pinch three fingers on a touchpad, or hold
+          Mod and pinch; a plain two-finger pinch still reaches the app. Hold Mod and move the mouse to pan,
+          with momentum you can tune.</p>
+        <figure class="shot">
+          <img src="img/zoomed-out-720.webp" srcset="img/zoomed-out-720.webp 720w, img/zoomed-out-1200.webp 1200w" sizes="(max-width: 760px) 92vw, 380px"
+               width="720" height="450" loading="lazy" decoding="async"
+               alt="newm-rs zoomed out in the browser demo: three windows drawn smaller on the canvas, none of them resized">
+          <figcaption>Zoomed out in the browser demo. Every window keeps its size.</figcaption>
+        </figure>
+      </article>
+      <article class="step">
+        <h3>An overview that dims the rest</h3>
+        <p>niri's overview shows every window at once; newm-rs dims everything outside what the
+          screen shows. A minimap in the corner tracks the camera and the windows whenever
+          something moves.</p>
+        <figure class="shot">
+          <img src="img/overview-720.webp" srcset="img/overview-720.webp 720w, img/overview-1200.webp 1200w" sizes="(max-width: 760px) 92vw, 380px"
+               width="720" height="450" loading="lazy" decoding="async"
+               alt="The overview in the full desktop demo: three terminal windows on their tiles, the area outside the screen dimmed">
+          <figcaption>The overview, from the full desktop demo.</figcaption>
+        </figure>
+      </article>
+      <article class="step">
+        <h3>New windows land where you look</h3>
+        <p>A new window opens on the free spot nearest the focused one, the spot the camera scrolls
+          least to show, at the size the app picks, rounded to whole tiles. newm-rs remembers each
+          app's last size, and opening a window never moves another.</p>
+        <p class="aside">Log out and back in, and every window returns to its tiles. Terminals reattach
+          their tmux and ssh sessions.</p>
+      </article>
+    </div>
+
+    <div class="sheet-foot">
+      <a href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/canvas.md">canvas.md</a>
+      <a href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/camera.md">camera.md</a>
+      <a href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/SPEC.md">SPEC.md, every rule and default</a>
+    </div>
+  </div>
+</section>
+
+<aside class="try-strip" aria-label="Try newm-rs">
+  <div class="wrap try-strip-in">
+    <p>Zoom the camera out and back yourself: <kbd>Alt</kbd> <kbd>-</kbd>, <kbd>Alt</kbd> <kbd>=</kbd>, <kbd>Alt</kbd> <kbd>0</kbd>.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="try/"><span class="btn-label">Try it now</span> <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></a>
+      <a class="btn btn-secondary" href="try/?full=1"><span class="btn-label">Full desktop</span></a>
+    </div>
+    <p class="try-strip-note">A real Linux guest boots in this tab: @small-mb@ MB, nothing to install.</p>
+  </div>
+</aside>
+
+<section class="rules" aria-labelledby="rules-title">
+  <div class="wrap">
+    <header class="sheet-head">
+      <h2 id="rules-title">Make room without making a mess.</h2>
+      <p>When a window moves, swaps or grows, the windows in its way step aside, live, while you drag.
+        newm-rs picks the arrangement by three rules, and you can undo and redo every one.</p>
+    </header>
+    <ol class="rule-list">
+      <li>
+        <svg viewBox="0 0 240 120" role="img" aria-labelledby="r1t">
+          <title id="r1t">Before: A grows right into B's tile. After: B moves one tile right, C stays where it was.</title>
+          <g class="rg"><path d="M0 .5H240M0 40.5H240M0 80.5H240M0 119.5H240M.5 0V120M40.5 0V120M80.5 0V120M120.5 0V120M160.5 0V120M200.5 0V120M239.5 0V120"/></g>
+          <rect class="rw" x="4" y="44" width="33" height="33"/><text x="12" y="65">A</text>
+          <rect class="rw" x="44" y="44" width="33" height="33"/><text x="52" y="65">B</text>
+          <rect class="rw" x="164" y="44" width="33" height="33"/><text x="172" y="65">C</text>
+          <rect class="rghost" x="4" y="44" width="73" height="33"/>
+          <path class="rarrow" d="M60 30h50m-6-5 6 5-6 5"/>
+        </svg>
+        <svg viewBox="0 0 240 120" role="img" aria-labelledby="r1t2" class="after">
+          <title id="r1t2">After</title>
+          <g class="rg"><path d="M0 .5H240M0 40.5H240M0 80.5H240M0 119.5H240M.5 0V120M40.5 0V120M80.5 0V120M120.5 0V120M160.5 0V120M200.5 0V120M239.5 0V120"/></g>
+          <rect class="rw rf" x="4" y="44" width="73" height="33"/><text x="12" y="65">A</text>
+          <rect class="rw rmoved" x="84" y="44" width="33" height="33"/><text x="92" y="65">B</text>
+          <rect class="rw" x="164" y="44" width="33" height="33"/><text x="172" y="65">C</text>
+        </svg>
+        <h3>Fewest tiles reassigned</h3>
+        <p>The cheapest arrangement wins. Each tile a window moves adds to the cost, so the rest of your canvas stays put.</p>
+      </li>
+      <li>
+        <svg viewBox="0 0 240 120" role="img" aria-labelledby="r2t">
+          <title id="r2t">Before: A moves right toward B and C, which touch side by side.</title>
+          <g class="rg"><path d="M0 .5H240M0 40.5H240M0 80.5H240M0 119.5H240M.5 0V120M40.5 0V120M80.5 0V120M120.5 0V120M160.5 0V120M200.5 0V120M239.5 0V120"/></g>
+          <rect class="rw" x="4" y="44" width="33" height="33"/><text x="12" y="65">A</text>
+          <rect class="rw risland" x="44" y="44" width="33" height="33"/><text x="52" y="65">B</text>
+          <rect class="rw risland" x="84" y="44" width="33" height="33"/><text x="92" y="65">C</text>
+          <path class="rarrow" d="M20 30h30m-6-5 6 5-6 5"/>
+        </svg>
+        <svg viewBox="0 0 240 120" role="img" aria-labelledby="r2t2" class="after">
+          <title id="r2t2">After: A takes B's tile, and B and C move together, still touching.</title>
+          <g class="rg"><path d="M0 .5H240M0 40.5H240M0 80.5H240M0 119.5H240M.5 0V120M40.5 0V120M80.5 0V120M120.5 0V120M160.5 0V120M200.5 0V120M239.5 0V120"/></g>
+          <rect class="rw rf" x="44" y="44" width="33" height="33"/><text x="52" y="65">A</text>
+          <rect class="rw risland rmoved" x="84" y="44" width="33" height="33"/><text x="92" y="65">B</text>
+          <rect class="rw risland rmoved" x="124" y="44" width="33" height="33"/><text x="132" y="65">C</text>
+        </svg>
+        <h3>Islands stay whole</h3>
+        <p>Windows sharing a side form an island. Windows connected before a move stay connected after it.</p>
+      </li>
+      <li>
+        <svg viewBox="0 0 240 120" role="img" aria-labelledby="r3t">
+          <title id="r3t">Before: A moves down into B's tile.</title>
+          <g class="rg"><path d="M0 .5H240M0 40.5H240M0 80.5H240M0 119.5H240M.5 0V120M40.5 0V120M80.5 0V120M120.5 0V120M160.5 0V120M200.5 0V120M239.5 0V120"/></g>
+          <rect class="rw" x="84" y="4" width="33" height="33"/><text x="92" y="25">A</text>
+          <rect class="rw" x="84" y="44" width="33" height="33"/><text x="92" y="65">B</text>
+          <path class="rarrow" d="M128 12v40m-5-6 5 6 5-6"/>
+        </svg>
+        <svg viewBox="0 0 240 120" role="img" aria-labelledby="r3t2" class="after">
+          <title id="r3t2">After: A is in B's old tile; B moved along its column rather than diagonally.</title>
+          <g class="rg"><path d="M0 .5H240M0 40.5H240M0 80.5H240M0 119.5H240M.5 0V120M40.5 0V120M80.5 0V120M120.5 0V120M160.5 0V120M200.5 0V120M239.5 0V120"/></g>
+          <rect class="rw rf" x="84" y="44" width="33" height="33"/><text x="92" y="65">A</text>
+          <rect class="rw rmoved" x="84" y="84" width="33" height="33"/><text x="92" y="105">B</text>
+          <rect class="rghost" x="124" y="84" width="33" height="33"/>
+        </svg>
+        <h3>Rows and columns are kept</h3>
+        <p>A window making room may move diagonally, but it pays for it, so it keeps its row or column when it can.</p>
+      </li>
+    </ol>
+    <p class="rules-legend" aria-hidden="true"><i class="lg lg-f"></i> the window you moved <i class="lg lg-m"></i> a window making room <i class="lg lg-g"></i> where it did not go</p>
+    <p class="proof">These rules are not a hope. A <a href="https://github.com/eordano/newm-rs/tree/main/newm-canvas/proof">Rocq model</a> proves the canvas's rules: no overlap, minimum sizes kept, the zoom as a camera, the least camera motion. A VM suite runs real apps against newm-rs.</p>
+  </div>
+</section>
+
+<aside class="try-strip" aria-label="Try newm-rs">
+  <div class="wrap try-strip-in">
+    <p>Move a window and watch the others make room.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="try/"><span class="btn-label">Try it now</span> <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></a>
+      <a class="btn btn-secondary" href="try/?full=1"><span class="btn-label">Full desktop</span></a>
+    </div>
+    <p class="try-strip-note">A real Linux guest boots in this tab: @small-mb@ MB, nothing to install.</p>
+  </div>
+</aside>
+
+<section class="keys" id="keys" aria-labelledby="keys-title">
+  <div class="wrap keys-in">
+    <div class="keys-copy">
+      <h2 id="keys-title">The left hand alone drives the canvas.</h2>
+      <p>Everything the mouse can do has an action you can bind: focus, resize by edges, send to an
+        edge, swap with a neighbour, gather islands, zoom, undo. The suggested binds put the whole
+        canvas under one hand.</p>
+      <p>Or keep the other hand on the mouse: Mod and a drag moves a window, Mod and a right-drag
+        resizes it with a preview, Mod and the wheel zooms one level per notch.</p>
+      <p class="small">Suggested binds from <a href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/input.md#suggested-binds">input.md</a>, not defaults. Mod is Super in a session, Alt when newm-rs runs nested in a window. Alt+Tab, Alt+Q and Mod+Return keep the meaning other desktops taught you.</p>
+    </div>
+    <div class="kbd-wrap">
+      <div class="kbd" role="table" aria-label="Suggested left-hand binds, with Mod held">
+        <div class="krow" role="row">
+          <div class="key" role="cell"><b>Q</b><span class="ks"><small>Shift</small> left edge</span></div>
+          <div class="key k-focus" role="cell"><b>W</b><span>focus up</span></div>
+          <div class="key" role="cell"><b>E</b><span class="ks"><small>Shift</small> right edge</span></div>
+          <div class="key k-off" role="cell"><b>R</b></div>
+          <div class="key k-off" role="cell"><b>T</b></div>
+        </div>
+        <div class="krow r2" role="row">
+          <div class="key k-focus" role="cell"><b>A</b><span>focus left</span><span class="ks"><small>Shift</small> send to edge</span></div>
+          <div class="key k-focus" role="cell"><b>S</b><span>focus down</span><span class="ks"><small>Shift</small> top edge</span></div>
+          <div class="key k-focus" role="cell"><b>D</b><span>focus right</span><span class="ks"><small>Shift</small> send to edge</span></div>
+          <div class="key k-off" role="cell"><b>F</b></div>
+          <div class="key k-cam" role="cell"><b>G</b><span>gather islands</span></div>
+        </div>
+        <div class="krow r3" role="row">
+          <div class="key k-cam" role="cell"><b>Z</b><span>undo</span><span class="ks"><small>Shift</small> redo</span></div>
+          <div class="key" role="cell"><b>X</b><span class="ks"><small>Shift</small> bottom edge</span></div>
+          <div class="key k-off" role="cell"><b>C</b></div>
+          <div class="key k-off" role="cell"><b>V</b></div>
+          <div class="key k-off" role="cell"><b>B</b></div>
+        </div>
+        <div class="krow r4" role="row">
+          <div class="key k-mod" role="cell"><b>Mod</b><span>hold for all of these</span></div>
+          <div class="key k-zoom" role="cell"><b>0</b><span>back to 1:1</span></div>
+          <div class="key k-zoom" role="cell"><b>= −</b><span>zoom in, out</span></div>
+        </div>
+      </div>
+      <p class="kbd-legend" aria-hidden="true"><i class="lg lg-focus"></i> focus <i class="lg lg-cam"></i> canvas <i class="lg lg-zoom"></i> camera</p>
+    </div>
+  </div>
+</section>
+
+<aside class="try-strip" aria-label="Try newm-rs">
+  <div class="wrap try-strip-in">
+    <p>Put your left hand on <kbd>Alt</kbd> and walk the canvas with <kbd>H</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd>.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="try/"><span class="btn-label">Try it now</span> <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></a>
+      <a class="btn btn-secondary" href="try/?full=1"><span class="btn-label">Full desktop</span></a>
+    </div>
+    <p class="try-strip-note">A real Linux guest boots in this tab: @small-mb@ MB, nothing to install.</p>
+  </div>
+</aside>
+
+<section class="browser" id="browser" aria-labelledby="browser-title">
+  <div class="wrap">
+    <header class="browser-head">
+      <h2 id="browser-title">It runs in this browser tab. Really.</h2>
+      <p>No VM to install, no ISO to flash. The demo boots a Linux guest right here: the kernel is
+        compiled to WebAssembly, and newm-rs and the terminals are real aarch64 programs, running
+        nested as one window of the page.</p>
+    </header>
+
+    <div class="tries">
+      <a class="try" href="try/">
+        <span class="try-frame">
+          <img src="img/small-demo-720.webp" srcset="img/small-demo-720.webp 720w, img/small-demo-1200.webp 1200w" sizes="(max-width: 760px) 92vw, 580px"
+               width="720" height="450" loading="lazy" decoding="async"
+               alt="The small demo: newm-rs in the browser with a terminal running tmux and a panel listing the keys">
+        </span>
+        <span class="try-text">
+          <span class="try-title">Try it in your browser <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></span>
+          <span class="try-sub">newm-rs, terminals and tmux. The fastest way in.</span>
+          <span class="try-size">@small-mb@ MB download</span>
+        </span>
+      </a>
+      <a class="try" href="try/?full=1">
+        <span class="try-frame">
+          <img src="img/full-desktop-720.webp" srcset="img/full-desktop-720.webp 720w, img/full-desktop-1200.webp 1200w" sizes="(max-width: 760px) 92vw, 580px"
+               width="720" height="450" loading="lazy" decoding="async"
+               alt="The full desktop demo: waybar along the top and the newm-rs help dialog listing the keys over the tiled terminals">
+        </span>
+        <span class="try-text">
+          <span class="try-title">Full desktop <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></span>
+          <span class="try-sub">waybar, Neovim and Alacritty, with the author's settings.</span>
+          <span class="try-size">@full-mb@ MB download</span>
+        </span>
+      </a>
+    </div>
+
+    <p class="browser-tip">Click the desktop to give it the keyboard. The Mod key is Alt there, since your
+      own desktop keeps Super. In the full desktop, Alacritty draws with your GPU: its OpenGL ES goes to the
+      page's WebGL2. Ghostty, the author's own terminal, needs desktop OpenGL 4.3, which a browser cannot
+      give it yet.</p>
+
+    <p class="credits">The boot is <a href="https://github.com/fzakaria/trynix">trynix</a> by Farid
+      Zakaria (MIT), on the <a href="https://github.com/pithings/unkernel">unkernel</a> engine;
+      windows are drawn by <a href="https://github.com/pithings/wland">wland</a>. Packages come from
+      <a href="https://cache.nixos.org">cache.nixos.org</a>.</p>
+  </div>
+</section>
+
+<section class="daily" aria-labelledby="daily-title">
+  <div class="wrap">
+    <header class="sheet-head">
+      <h2 id="daily-title">Built to be daily-driven.</h2>
+      <p>newm-rs is niri with a different layout. niri gives it the backends, rendering, input,
+        protocols, IPC, config, animations and the overview, and newm-rs tracks niri's main branch.</p>
+    </header>
+    <table class="spec">
+      <caption class="vh">What newm-rs brings beyond the canvas</caption>
+      <tbody>
+        <tr><th scope="row">Your session</th><td>Log out and back in and every window returns to its tiles. Terminals reattach tmux and ssh; Chromium-family browsers relaunch with their last session, and Firefox restores its own.</td></tr>
+        <tr><th scope="row">KDE</th><td>KDE global shortcuts, KRunner's window search, Spectacle screenshots and recordings, KDE Connect's remote input, the KDE portals.</td></tr>
+        <tr><th scope="row">Every toolkit</th><td>GTK 3 and 4, libadwaita, Qt, Firefox, Chromium, Electron and X11 apps, crisp at fractional scale.</td></tr>
+        <tr><th scope="row">The lock</th><td>The screen stays locked even if the locker crashes. The bundled <code>newm-rs-lock</code> never exits while the session is locked.</td></tr>
+        <tr><th scope="row">Stability</th><td>A Rocq model proves the canvas's rules. Main-loop work of 8&nbsp;ms or more names itself in the log. Session saves run on their own threads.</td></tr>
+        <tr><th scope="row">Your config</th><td>niri's KDL config, from the same place. Every niri option keeps working; newm-rs adds <code>layout&nbsp;{&nbsp;canvas&nbsp;{&nbsp;}&nbsp;}</code> and a few bind actions.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="install" id="install" aria-labelledby="install-title">
+  <div class="wrap install-in">
+    <div>
+      <h2 id="install-title">Run it on your machine.</h2>
+      <p>The flake builds newm-rs with the canvas, for every Linux system nixpkgs offers. Inside
+        your current desktop it opens as a window, where Mod is Alt.</p>
+    </div>
+    <div class="cmds">
+      <div class="cmd">
+        <span class="cmd-cap">Try it nested, with Nix</span>
+        <pre><code>nix run github:eordano/newm-rs</code></pre>
+      </div>
+      <div class="cmd">
+        <span class="cmd-cap">Build the package</span>
+        <pre><code>nix build github:eordano/newm-rs</code></pre>
+        <p>The package holds <code>newm-rs</code>, <code>newm-rs-lock</code>, <code>newm-rs-session</code>,
+          the systemd user units and a <code>newm-rs</code> session for your display manager. The
+          flake's <code>overlays.default</code> adds <code>newm-rs</code> to nixpkgs.</p>
+      </div>
+      <div class="cmd">
+        <span class="cmd-cap">Without Nix</span>
+        <pre><code>cargo build --release --features canvas</code></pre>
+        <p>It needs the libraries niri needs. Start the session from a TTY with
+          <code>newm-rs-session</code>. The <a href="https://github.com/eordano/newm-rs#getting-started">README</a> has the details.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="close" aria-labelledby="close-title">
+  <div class="wrap close-in">
+    <h2 id="close-title">Point the camera at it.</h2>
+    <p>One click, one tab, a real Linux desktop on a tile canvas.</p>
+    <div class="ctas">
+      <a class="btn btn-invert" href="try/"><span class="btn-label">Try it in your browser</span>
+        <svg class="btn-arrow" viewBox="0 0 20 12" aria-hidden="true"><path d="M0 6h18M13 1l5 5-5 5"/></svg></a>
+      <a class="btn btn-ghost" href="https://github.com/eordano/newm-rs"><span class="btn-label">View on GitHub</span></a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-in">
+    <p><b>newm-rs</b> is free software under the GPL-3.0-or-later, as niri.</p>
+    <p>Built on <a href="https://github.com/niri-wm/niri">niri</a> by Ivan Molodetskikh and its
+      contributors, and <a href="https://github.com/Smithay/smithay">Smithay</a>. The idea of the 2D
+      canvas comes from <a href="https://github.com/jbuchermn/newm">newm</a> by Jonas Bucher.</p>
+    <p><a href="https://github.com/eordano/newm-rs">Source</a> · <a href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/principles.md">Principles</a> · <a href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/configuration.md">Configuration</a> · <a href="https://github.com/eordano/newm-rs/blob/main/docs/newm-rs/SPEC.md">Specification</a></p>
+  </div>
+</footer>
+</body>
+</html>
