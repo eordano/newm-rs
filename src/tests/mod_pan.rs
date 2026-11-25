@@ -214,3 +214,39 @@ fn alt_as_the_mod_key_pans_once_settled() {
     assert_ne!(view(&mut f), before, "Alt pans once settled");
     key(&mut f, ALT, KeyState::Released, T0 + 200);
 }
+
+/// The pointer to `(x, y)` of the 1920x1080 output, as a nested session (winit) and a virtual
+/// pointer send it: a position, no delta.
+fn motion_absolute(f: &mut Fixture, id: ClientId, ms: u32, x: f64, y: f64) {
+    let pointer = f.client(id).state.virtual_pointer();
+    pointer.motion_absolute(ms, x as u32, y as u32, 1920, 1080);
+    pointer.frame();
+    f.roundtrip(id);
+}
+
+#[test]
+fn absolute_motion_with_the_mod_key_pans_once_settled() {
+    let (mut f, id) = set_up(ALT_MOD);
+    point_at_window_corner(&mut f, 40.);
+    let start = pointer(&mut f).current_location();
+    let before = view(&mut f);
+    key(&mut f, ALT, KeyState::Pressed, T0);
+    motion_absolute(&mut f, id, T0 + 40, start.x + 10., start.y);
+    assert_eq!(view(&mut f), before, "the hand settling pans nothing");
+    motion_absolute(&mut f, id, T0 + 120, start.x + 20., start.y);
+    motion_absolute(&mut f, id, T0 + 140, start.x + 30., start.y);
+    assert_ne!(
+        view(&mut f),
+        before,
+        "positions with Alt held pan once settled"
+    );
+    assert!(!pointer(&mut f).is_grabbed(), "a pan holds no grab");
+    key(&mut f, ALT, KeyState::Released, T0 + 200);
+    let after = view(&mut f);
+    motion_absolute(&mut f, id, T0 + 400, start.x + 60., start.y);
+    assert_eq!(
+        view(&mut f),
+        after,
+        "without Alt, positions only move the pointer"
+    );
+}

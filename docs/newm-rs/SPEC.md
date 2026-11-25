@@ -556,6 +556,7 @@ range is an error ("invalid value") unless the table says it clamps.
 | `default-width` | preset size | unset (one tile) | | Open width when no rule sizes it (3.10). |
 | `default-height` | preset size | unset (one tile) | | Open height when no rule sizes it. |
 | `super-tap-overview` | flag | off | | A Super tap toggles the overview (4.3). |
+| `super-tap-zoom` | float | unset | 0-16 | A Super tap at 1:1 zooms out to the step nearest this scale, at any other zoom back to 1:1; set, it takes the tap from `super-tap-overview` (4.3). |
 | `center-on-switch` | flag | off | | Alt+Tab and KRunner picks centre the window (4.7). |
 | `floating-follow` | string | `"screen"` | screen, parent, canvas | 3.13. |
 | `restore-session` | flag | on | | Section 6. |
@@ -610,9 +611,9 @@ drops any level saved by zoom-to-fit, so a later Mod release stays at 1:1. Refer
 - Everything outside the area the screen shows (the active workspace's rect: windows beyond it,
   other workspaces, the backdrop) is dimmed by a black layer of alpha `overview-dim` (0.4). niri's
   translucent workspace box is not drawn. Top and overlay layer surfaces stay undimmed.
-- The overview opens and closes by: a Super tap with `super-tap-overview` (Super pressed and
-  released within 300 ms with no other key or button since, and no Ctrl, Alt or Shift held when it
-  went down); niri's hot
+- The overview opens and closes by: a Super tap with `super-tap-overview` and no `super-tap-zoom`
+  (Super pressed and released within 300 ms with no other key or button since, and no Ctrl, Alt or
+  Shift held when it went down); niri's hot
   corner; niri's `toggle-overview` action (niri's default config binds a Mod release).
 - In the overview, canvas swipes and Mod pans are off; niri's own gestures apply.
 
@@ -752,7 +753,7 @@ targets generic):
 | Super+0 | Zoom reset |
 | Super+Z / Super+Shift+Z | Undo / redo |
 | Super+I | Gather islands |
-| Super tap | Overview |
+| Super tap | Overview, or with `super-tap-zoom` zoom out and back to 1:1 |
 | Alt+Tab | Window switcher, centring the pick |
 | Alt+Q | Close the window |
 | Super+Q | Quit the app (all its windows) |

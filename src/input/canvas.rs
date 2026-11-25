@@ -313,7 +313,9 @@ fn mod_alone(held: Modifiers, mod_key: ModKey) -> bool {
 }
 
 impl State {
-    /// A tap of the mod key alone toggles the overview (`canvas { super-tap-overview }`). The
+    /// A tap of the mod key alone zooms the camera out to `canvas { super-tap-zoom }` from 1:1 and
+    /// back to 1:1 from any other zoom; without it, it toggles the overview
+    /// (`canvas { super-tap-overview }`). The
     /// mod key pressed while another modifier is held starts no tap. Its release also ends a
     /// mod key pan and the camera's pull-back to the whole canvas.
     pub(super) fn canvas_super_tap(&mut self, code: Keycode, pressed: bool, time: u32) {
@@ -348,7 +350,24 @@ impl State {
         let tapped = !pressed
             && is_mod
             && start.is_some_and(|start| time.wrapping_sub(start) <= SUPER_TAP_MS);
-        if tapped && self.niri.config.borrow().layout.canvas.super_tap_overview {
+        if !tapped {
+            return;
+        }
+        let (tap_zoom, tap_overview) = {
+            let config = self.niri.config.borrow();
+            let canvas = &config.layout.canvas;
+            (canvas.super_tap_zoom, canvas.super_tap_overview)
+        };
+        if let Some(scale) = tap_zoom {
+            if let Some(state) = self.niri.layout.canvas_zoom_state() {
+                if state.zoom == 0 {
+                    self.niri.layout.canvas_zoom(pinch_zoom(0, scale, state));
+                } else {
+                    self.niri.layout.canvas_zoom_reset();
+                }
+                self.niri.queue_redraw_all();
+            }
+        } else if tap_overview {
             self.niri.layout.toggle_overview();
             self.niri.queue_redraw_all();
         }

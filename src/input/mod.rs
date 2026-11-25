@@ -2677,15 +2677,15 @@ impl State {
                 self.niri.queue_redraw_all();
             }
             Action::ToggleSynthBackground => {
-                #[cfg(feature = "synth")]
+                #[cfg(feature = "synth-visual")]
                 self.niri.synth_toggle();
-                #[cfg(not(feature = "synth"))]
+                #[cfg(not(feature = "synth-visual"))]
                 warn!("toggle-synth-background: newm-rs was built without the synth feature");
             }
             Action::SetSynthBackground(mode) => {
-                #[cfg(feature = "synth")]
+                #[cfg(feature = "synth-visual")]
                 self.niri.synth_set_mode(mode);
-                #[cfg(not(feature = "synth"))]
+                #[cfg(not(feature = "synth-visual"))]
                 warn!(
                     "set-synth-background {}: newm-rs was built without the synth feature",
                     mode.name()
@@ -3184,6 +3184,21 @@ impl State {
         }
 
         let under = self.niri.contents_under(pos);
+
+        // A nested session (winit) and a virtual pointer send only positions: the mod key pan
+        // takes the motion from the last position, as the relative path takes the device's.
+        #[cfg(feature = "canvas")]
+        let under = {
+            let delta = pos - pointer.current_location();
+            if self.canvas_super_pan(delta, delta, Duration::from_micros(event.time().micros())) {
+                PointContents {
+                    output: under.output,
+                    ..PointContents::default()
+                }
+            } else {
+                under
+            }
+        };
 
         self.niri.handle_focus_follows_mouse(&under);
 
