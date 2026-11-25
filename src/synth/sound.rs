@@ -107,7 +107,7 @@ pub fn open(event_loop: LoopHandle<'static, State>, peak: Rc<Cell<f32>>) -> anyh
             // F32LE mono, aligned as PipeWire maps it; read through bytes to stay safe.
             let mut sum = 0f32;
             let mut n = 0usize;
-            for s in bytes.chunks_exact(4) {
+            for s in bytes.as_chunks::<4>().0 {
                 let v = f32::from_le_bytes([s[0], s[1], s[2], s[3]]);
                 sum += v * v;
                 n += 1;

@@ -136,11 +136,15 @@ fn load_png(path: &str) -> anyhow::Result<(MemoryRenderBuffer, Size<i32, Logical
     let rgba: Vec<u8> = match info.color_type {
         png::ColorType::Rgba => buf[..pixels * 4].to_vec(),
         png::ColorType::Rgb => buf[..pixels * 3]
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         png::ColorType::GrayscaleAlpha => buf[..pixels * 2]
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Grayscale => buf[..pixels].iter().flat_map(|&g| [g, g, g, 255]).collect(),

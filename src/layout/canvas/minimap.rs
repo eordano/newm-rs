@@ -744,7 +744,7 @@ mod tests {
             assert!(alpha(0, px.h / 2) < 16, "faded out at the side");
             assert!(alpha(px.w / 2, 0) < 16, "and at the top");
             assert!(alpha(px.w / 2, px.h / 2) > 200, "solid in the middle");
-            for p in bytes.chunks_exact(4) {
+            for p in bytes.as_chunks::<4>().0 {
                 assert!(
                     p[0] <= p[3] && p[1] <= p[3] && p[2] <= p[3],
                     "premultiplied"
