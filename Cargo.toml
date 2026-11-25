@@ -22,6 +22,8 @@ rust-version = "1.88"
 new_without_default = "allow"
 collapsible_match = "allow"
 needless_bool = "allow"
+# Edition 2024 on Rust 1.88 has let chains; the code niri shares is written without them.
+collapsible_if = "allow"
 
 # Silence, Clippy
 # A Smithay user is talking
@@ -63,8 +65,8 @@ readme = "README.md"
 keywords = ["wayland", "compositor", "tiling", "smithay", "wm"]
 
 [dependencies]
-accesskit = { version = "0.25", optional = true }
-accesskit_unix = { version = "0.23", optional = true }
+accesskit = { version = "0.25.2", optional = true }
+accesskit_unix = { version = "0.24", optional = true }
 anyhow.workspace = true
 arrayvec = "0.7.8"
 async-channel = "2.5.0"
@@ -79,7 +81,7 @@ clap_complete_nushell = "4.6"
 directories = "6.0.0"
 drm-ffi = "0.9.1"
 fastrand = "2.5.0"
-futures-util = { version = "0.3", default-features = false, features = ["std", "io"] }
+futures-util = { version = "0.3", default-features = false, features = ["std", "io", "async-await-macro"] }
 git-version = "0.3.9"
 glam = "0.33"
 input = { version = "0.10.0", features = ["libinput_1_21"] }
@@ -94,8 +96,8 @@ niri-config = { version = "26.4.0", path = "niri-config" }
 niri-ipc = { version = "26.4.0", path = "niri-ipc", features = ["clap"] }
 ordered-float = "5"
 pipewire = { version = "0.10", optional = true, features = ["v0_3_33"] }
-pango = { version = "0.21.5", features = ["v1_44"], optional = true }
-pangocairo = { version = "0.21.5", optional = true }
+pango = { version = "0.22.9", features = ["v1_44"], optional = true }
+pangocairo = { version = "0.22.9", optional = true }
 png = "0.18.1"
 portable-atomic = "1"
 profiling = "1.0.18"
@@ -134,8 +136,8 @@ features = [
 approx = "0.5.1"
 calloop-wayland-source = "0.4.1"
 insta.workspace = true
-proptest = "1.11.0"
-proptest-derive = { version = "0.8.0", features = ["boxed_union"] }
+proptest = "1.12.0"
+proptest-derive = { version = "0.9.0", features = ["boxed_union"] }
 rayon = "1.12.0"
 wayland-client = "0.31.15"
 xshell = "0.2.7"
@@ -169,9 +171,11 @@ dinit = []
 canvas = ["dep:newm-canvas", "dep:newm-kde", "niri-config/canvas", "niri-ipc/canvas"]
 # Writes the canvas usage log ($XDG_STATE_HOME/newm-rs/usage.jsonl) for tuning placement.
 telemetry = ["canvas"]
-# Draws newm-synth's animated background behind everything (`synth-background { }`), and
-# listens to the sound playing through PipeWire when `react-to-sound` asks.
-synth = ["dep:newm-synth", "dep:pipewire"]
+# Draws newm-synth's animated background behind everything (`synth-background { }`).
+synth-visual = ["dep:newm-synth"]
+# The background, and listening to the sound playing through PipeWire when `react-to-sound`
+# asks.
+synth = ["synth-visual", "dep:pipewire"]
 # Renders text with pango: the hotkey overlay, dialog and notification text, window titles.
 text = ["dep:pango", "dep:pangocairo"]
 
@@ -184,7 +188,7 @@ overflow-checks = true
 lto = "thin"
 
 [profile.release.package.niri-config]
-# knuffel with chomsky generates a metric ton of debuginfo.
+# knus with chumsky generates a metric ton of debuginfo.
 debug = false
 
 [profile.dev.package]

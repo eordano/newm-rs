@@ -10,7 +10,7 @@ description = "Screen locker for newm-rs over ext-session-lock-v1"
 [dependencies]
 libc = "0.2.185"
 png = "0.18.1"
-smithay-client-toolkit = { version = "0.19.2", default-features = false, features = ["calloop"] }
+smithay-client-toolkit = { version = "0.21.1", default-features = false, features = ["calloop"] }
 wayland-client = "0.31.14"
 wayland-protocols = { version = "0.32.12", features = ["client", "staging"] }
 xkbcommon = { version = "0.9.0", default-features = false, features = ["wayland"] }

@@ -18,6 +18,10 @@ pub struct Canvas {
     /// row and its column: `diagonal-weight 1`.
     pub diagonal_weight: f64,
     pub super_tap_overview: bool,
+    /// The camera scale a Super tap at 1:1 zooms out to, as the nearest whole zoom step:
+    /// `super-tap-zoom 0.33`. A tap at any other zoom returns the camera to 1:1. Set, it takes the
+    /// tap from `super-tap-overview`.
+    pub super_tap_zoom: Option<f64>,
     /// Whether confirming a window in the Alt+Tab switcher centres it on screen.
     pub center_on_switch: bool,
     /// How dark the overview draws what lies outside the area the screen shows: the alpha of a
@@ -78,6 +82,7 @@ impl Default for Canvas {
             distance_weight: 0.5,
             diagonal_weight: 1.0,
             super_tap_overview: false,
+            super_tap_zoom: None,
             center_on_switch: false,
             overview_dim: 0.4,
             pan_acceleration: 1.,
@@ -93,51 +98,53 @@ impl Default for Canvas {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Clone, PartialEq)]
 pub struct RestoreExclude {
-    #[knuffel(property, str)]
+    #[knus(property, str)]
     pub app_id: RegexEq,
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct CanvasPart {
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub tile_width: Option<FloatOrInt<1, 65535>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub tile_height: Option<FloatOrInt<1, 65535>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub zoom_step: Option<FloatOrInt<0, 1>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub zoom_min: Option<i32>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub zoom_max: Option<i32>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub distance_weight: Option<FloatOrInt<0, 100>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub diagonal_weight: Option<FloatOrInt<0, 100>>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub super_tap_overview: Option<Flag>,
-    #[knuffel(child)]
+    #[knus(child, unwrap(argument))]
+    pub super_tap_zoom: Option<FloatOrInt<0, 16>>,
+    #[knus(child)]
     pub center_on_switch: Option<Flag>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub overview_dim: Option<FloatOrInt<0, 1>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub pan_acceleration: Option<FloatOrInt<0, 1>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub pan_momentum: Option<FloatOrInt<0, 1>>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub default_width: Option<DefaultPresetSize>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub default_height: Option<DefaultPresetSize>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub restore_session: Option<Flag>,
-    #[knuffel(children(name = "restore-exclude"))]
+    #[knus(children(name = "restore-exclude"))]
     pub restore_exclude: Vec<RestoreExclude>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub floating_follow: Option<FloatingFollow>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub one_workspace: Option<Flag>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub magnified_input: Option<Flag>,
 }
 
@@ -169,6 +176,9 @@ impl MergeWith<CanvasPart> for Canvas {
         }
         if let Some(x) = part.super_tap_overview {
             self.super_tap_overview = x.0;
+        }
+        if let Some(x) = part.super_tap_zoom {
+            self.super_tap_zoom = (x.0 > 0.).then_some(x.0);
         }
         if let Some(x) = part.center_on_switch {
             self.center_on_switch = x.0;
@@ -226,6 +236,7 @@ mod tests {
                     distance-weight 0.25
                     diagonal-weight 2
                     super-tap-overview
+                    super-tap-zoom 0.33
                     center-on-switch
                     overview-dim 0.25
                     default-width { fixed 960; }
@@ -264,6 +275,7 @@ mod tests {
                 distance_weight: 0.25,
                 diagonal_weight: 2.0,
                 super_tap_overview: true,
+                super_tap_zoom: Some(0.33),
                 center_on_switch: true,
                 overview_dim: 0.25,
                 pan_acceleration: 1.,

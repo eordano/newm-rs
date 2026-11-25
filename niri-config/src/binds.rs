@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use bitflags::bitflags;
-use knuffel::errors::DecodeError;
+use knus::errors::DecodeError;
 use miette::miette;
 use niri_ipc::{
     ColumnDisplay, LayoutSwitchTarget, PositionChange, SizeChange, WorkspaceReferenceArg,
@@ -204,15 +204,15 @@ bitflags! {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct SwitchBinds {
-    #[knuffel(child)]
+    #[knus(child)]
     pub lid_open: Option<SwitchAction>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub lid_close: Option<SwitchAction>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub tablet_mode_on: Option<SwitchAction>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub tablet_mode_off: Option<SwitchAction>,
 }
 
@@ -228,17 +228,17 @@ impl MergeWith<SwitchBinds> for SwitchBinds {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Clone, PartialEq)]
 pub struct SwitchAction {
-    #[knuffel(child, unwrap(arguments))]
+    #[knus(child, unwrap(arguments))]
     pub spawn: Vec<String>,
 }
 
 // Remember to add new actions to the CLI enum too.
-#[derive(knuffel::Decode, Debug, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Clone, PartialEq)]
 pub enum Action {
-    Quit(#[knuffel(property(name = "skip-confirmation"), default)] bool),
-    ChangeVt(#[knuffel(argument)] u8),
+    Quit(#[knus(property(name = "skip-confirmation"), default)] bool),
+    ChangeVt(#[knus(argument)] u8),
     Suspend,
     PowerOffMonitors,
     PowerOnMonitors,
@@ -246,35 +246,35 @@ pub enum Action {
     DebugToggleOpaqueRegions,
     DebugToggleDamage,
     ToggleTouchpad,
-    Spawn(#[knuffel(arguments)] Vec<String>),
-    SpawnSh(#[knuffel(argument)] String),
-    DoScreenTransition(#[knuffel(property(name = "delay-ms"))] Option<u16>),
-    #[knuffel(skip)]
+    Spawn(#[knus(arguments)] Vec<String>),
+    SpawnSh(#[knus(argument)] String),
+    DoScreenTransition(#[knus(property(name = "delay-ms"))] Option<u16>),
+    #[knus(skip)]
     ConfirmScreenshot {
         write_to_disk: bool,
     },
-    #[knuffel(skip)]
+    #[knus(skip)]
     CancelScreenshot,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ScreenshotTogglePointer,
     Screenshot(
-        #[knuffel(property(name = "show-pointer"), default = true)] bool,
-        // Path; not settable from knuffel
+        #[knus(property(name = "show-pointer"), default = true)] bool,
+        // Path; not settable from knus
         Option<String>,
     ),
     ScreenshotScreen(
-        #[knuffel(property(name = "write-to-disk"), default = true)] bool,
-        #[knuffel(property(name = "show-pointer"), default = true)] bool,
-        // Path; not settable from knuffel
+        #[knus(property(name = "write-to-disk"), default = true)] bool,
+        #[knus(property(name = "show-pointer"), default = true)] bool,
+        // Path; not settable from knus
         Option<String>,
     ),
     ScreenshotWindow(
-        #[knuffel(property(name = "write-to-disk"), default = true)] bool,
-        #[knuffel(property(name = "show-pointer"), default = false)] bool,
-        // Path; not settable from knuffel
+        #[knus(property(name = "write-to-disk"), default = true)] bool,
+        #[knus(property(name = "show-pointer"), default = false)] bool,
+        // Path; not settable from knus
         Option<String>,
     ),
-    #[knuffel(skip)]
+    #[knus(skip)]
     ScreenshotWindowById {
         id: u64,
         write_to_disk: bool,
@@ -283,47 +283,47 @@ pub enum Action {
     },
     ToggleKeyboardShortcutsInhibit,
     CloseWindow,
-    #[knuffel(skip)]
+    #[knus(skip)]
     CloseWindowById(u64),
     FullscreenWindow,
-    #[knuffel(skip)]
+    #[knus(skip)]
     FullscreenWindowById(u64),
     ToggleWindowedFullscreen,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ToggleWindowedFullscreenById(u64),
     SetWindowFullscreen,
-    #[knuffel(skip)]
+    #[knus(skip)]
     SetWindowFullscreenById(u64),
     UnsetWindowFullscreen,
-    #[knuffel(skip)]
+    #[knus(skip)]
     UnsetWindowFullscreenById(u64),
     SetWindowMaximizedToEdges,
-    #[knuffel(skip)]
+    #[knus(skip)]
     SetWindowMaximizedToEdgesById(u64),
     UnsetWindowMaximizedToEdges,
-    #[knuffel(skip)]
+    #[knus(skip)]
     UnsetWindowMaximizedToEdgesById(u64),
     SetWindowedFullscreen,
-    #[knuffel(skip)]
+    #[knus(skip)]
     SetWindowedFullscreenById(u64),
     UnsetWindowedFullscreen,
-    #[knuffel(skip)]
+    #[knus(skip)]
     UnsetWindowedFullscreenById(u64),
-    #[knuffel(skip)]
+    #[knus(skip)]
     FocusWindow(u64),
-    FocusWindowInColumn(#[knuffel(argument)] u8),
+    FocusWindowInColumn(#[knus(argument)] u8),
     FocusWindowPrevious,
     FocusColumnLeft,
-    #[knuffel(skip)]
+    #[knus(skip)]
     FocusColumnLeftUnderMouse,
     FocusColumnRight,
-    #[knuffel(skip)]
+    #[knus(skip)]
     FocusColumnRightUnderMouse,
     FocusColumnFirst,
     FocusColumnLast,
     FocusColumnRightOrFirst,
     FocusColumnLeftOrLast,
-    FocusColumn(#[knuffel(argument)] usize),
+    FocusColumn(#[knus(argument)] usize),
     FocusWindowOrMonitorUp,
     FocusWindowOrMonitorDown,
     FocusColumnOrMonitorLeft,
@@ -346,92 +346,92 @@ pub enum Action {
     MoveColumnToLast,
     MoveColumnLeftOrToMonitorLeft,
     MoveColumnRightOrToMonitorRight,
-    MoveColumnToIndex(#[knuffel(argument)] usize),
+    MoveColumnToIndex(#[knus(argument)] usize),
     MoveWindowDown,
     MoveWindowUp,
     MoveWindowDownOrToWorkspaceDown,
     MoveWindowUpOrToWorkspaceUp,
     ConsumeOrExpelWindowLeft,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ConsumeOrExpelWindowLeftById(u64),
     ConsumeOrExpelWindowRight,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ConsumeOrExpelWindowRightById(u64),
     ConsumeWindowIntoColumn,
     ExpelWindowFromColumn,
     SwapWindowLeft,
     SwapWindowRight,
     ToggleColumnTabbedDisplay,
-    SetColumnDisplay(#[knuffel(argument, str)] ColumnDisplay),
+    SetColumnDisplay(#[knus(argument, str)] ColumnDisplay),
     CenterColumn,
     CenterWindow,
-    #[knuffel(skip)]
+    #[knus(skip)]
     CenterWindowById(u64),
     CenterVisibleColumns,
     FocusWorkspaceDown,
-    #[knuffel(skip)]
+    #[knus(skip)]
     FocusWorkspaceDownUnderMouse,
     FocusWorkspaceUp,
-    #[knuffel(skip)]
+    #[knus(skip)]
     FocusWorkspaceUpUnderMouse,
-    FocusWorkspace(#[knuffel(argument)] WorkspaceReference),
+    FocusWorkspace(#[knus(argument)] WorkspaceReference),
     FocusWorkspacePrevious,
-    MoveWindowToWorkspaceDown(#[knuffel(property(name = "focus"), default = true)] bool),
-    MoveWindowToWorkspaceUp(#[knuffel(property(name = "focus"), default = true)] bool),
+    MoveWindowToWorkspaceDown(#[knus(property(name = "focus"), default = true)] bool),
+    MoveWindowToWorkspaceUp(#[knus(property(name = "focus"), default = true)] bool),
     MoveWindowToWorkspace(
-        #[knuffel(argument)] WorkspaceReference,
-        #[knuffel(property(name = "focus"), default = true)] bool,
+        #[knus(argument)] WorkspaceReference,
+        #[knus(property(name = "focus"), default = true)] bool,
     ),
-    #[knuffel(skip)]
+    #[knus(skip)]
     MoveWindowToWorkspaceById {
         window_id: u64,
         reference: WorkspaceReference,
         focus: bool,
     },
-    MoveColumnToWorkspaceDown(#[knuffel(property(name = "focus"), default = true)] bool),
-    MoveColumnToWorkspaceUp(#[knuffel(property(name = "focus"), default = true)] bool),
+    MoveColumnToWorkspaceDown(#[knus(property(name = "focus"), default = true)] bool),
+    MoveColumnToWorkspaceUp(#[knus(property(name = "focus"), default = true)] bool),
     MoveColumnToWorkspace(
-        #[knuffel(argument)] WorkspaceReference,
-        #[knuffel(property(name = "focus"), default = true)] bool,
+        #[knus(argument)] WorkspaceReference,
+        #[knus(property(name = "focus"), default = true)] bool,
     ),
     MoveWorkspaceDown,
     MoveWorkspaceUp,
-    MoveWorkspaceToIndex(#[knuffel(argument)] usize),
-    #[knuffel(skip)]
+    MoveWorkspaceToIndex(#[knus(argument)] usize),
+    #[knus(skip)]
     MoveWorkspaceToIndexByRef {
         new_idx: usize,
         reference: WorkspaceReference,
     },
-    #[knuffel(skip)]
+    #[knus(skip)]
     MoveWorkspaceToMonitorByRef {
         output_name: String,
         reference: WorkspaceReference,
     },
-    MoveWorkspaceToMonitor(#[knuffel(argument)] String),
-    SetWorkspaceName(#[knuffel(argument)] String),
-    #[knuffel(skip)]
+    MoveWorkspaceToMonitor(#[knus(argument)] String),
+    SetWorkspaceName(#[knus(argument)] String),
+    #[knus(skip)]
     SetWorkspaceNameByRef {
         name: String,
         reference: WorkspaceReference,
     },
     UnsetWorkspaceName,
-    #[knuffel(skip)]
-    UnsetWorkSpaceNameByRef(#[knuffel(argument)] WorkspaceReference),
+    #[knus(skip)]
+    UnsetWorkSpaceNameByRef(#[knus(argument)] WorkspaceReference),
     FocusMonitorLeft,
     FocusMonitorRight,
     FocusMonitorDown,
     FocusMonitorUp,
     FocusMonitorPrevious,
     FocusMonitorNext,
-    FocusMonitor(#[knuffel(argument)] String),
+    FocusMonitor(#[knus(argument)] String),
     MoveWindowToMonitorLeft,
     MoveWindowToMonitorRight,
     MoveWindowToMonitorDown,
     MoveWindowToMonitorUp,
     MoveWindowToMonitorPrevious,
     MoveWindowToMonitorNext,
-    MoveWindowToMonitor(#[knuffel(argument)] String),
-    #[knuffel(skip)]
+    MoveWindowToMonitor(#[knus(argument)] String),
+    #[knus(skip)]
     MoveWindowToMonitorById {
         id: u64,
         output: String,
@@ -442,43 +442,43 @@ pub enum Action {
     MoveColumnToMonitorUp,
     MoveColumnToMonitorPrevious,
     MoveColumnToMonitorNext,
-    MoveColumnToMonitor(#[knuffel(argument)] String),
-    SetWindowWidth(#[knuffel(argument, str)] SizeChange),
-    #[knuffel(skip)]
+    MoveColumnToMonitor(#[knus(argument)] String),
+    SetWindowWidth(#[knus(argument, str)] SizeChange),
+    #[knus(skip)]
     SetWindowWidthById {
         id: u64,
         change: SizeChange,
     },
-    SetWindowHeight(#[knuffel(argument, str)] SizeChange),
-    #[knuffel(skip)]
+    SetWindowHeight(#[knus(argument, str)] SizeChange),
+    #[knus(skip)]
     SetWindowHeightById {
         id: u64,
         change: SizeChange,
     },
     ResetWindowHeight,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ResetWindowHeightById(u64),
     SwitchPresetColumnWidth,
     SwitchPresetColumnWidthBack,
     SwitchPresetWindowWidth,
     SwitchPresetWindowWidthBack,
-    #[knuffel(skip)]
+    #[knus(skip)]
     SwitchPresetWindowWidthById(u64),
-    #[knuffel(skip)]
+    #[knus(skip)]
     SwitchPresetWindowWidthBackById(u64),
     SwitchPresetWindowHeight,
     SwitchPresetWindowHeightBack,
-    #[knuffel(skip)]
+    #[knus(skip)]
     SwitchPresetWindowHeightById(u64),
-    #[knuffel(skip)]
+    #[knus(skip)]
     SwitchPresetWindowHeightBackById(u64),
     MaximizeColumn,
     MaximizeWindowToEdges,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MaximizeWindowToEdgesById(u64),
-    SetColumnWidth(#[knuffel(argument, str)] SizeChange),
+    SetColumnWidth(#[knus(argument, str)] SizeChange),
     ExpandColumnToAvailableWidth,
-    SwitchLayout(#[knuffel(argument, str)] LayoutSwitchTarget),
+    SwitchLayout(#[knus(argument, str)] LayoutSwitchTarget),
     ShowHotkeyOverlay,
     MoveWorkspaceToMonitorLeft,
     MoveWorkspaceToMonitorRight,
@@ -487,48 +487,48 @@ pub enum Action {
     MoveWorkspaceToMonitorPrevious,
     MoveWorkspaceToMonitorNext,
     ToggleWindowFloating,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ToggleWindowFloatingById(u64),
     MoveWindowToFloating,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MoveWindowToFloatingById(u64),
     MoveWindowToTiling,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MoveWindowToTilingById(u64),
     FocusFloating,
     FocusTiling,
     SwitchFocusBetweenFloatingAndTiling,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MoveFloatingWindowById {
         id: Option<u64>,
         x: PositionChange,
         y: PositionChange,
     },
     ToggleWindowRuleOpacity,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ToggleWindowRuleOpacityById(u64),
     SetDynamicCastWindow,
-    #[knuffel(skip)]
+    #[knus(skip)]
     SetDynamicCastWindowById(u64),
-    SetDynamicCastMonitor(#[knuffel(argument)] Option<String>),
+    SetDynamicCastMonitor(#[knus(argument)] Option<String>),
     ClearDynamicCastTarget,
-    #[knuffel(skip)]
+    #[knus(skip)]
     StopCast(u64),
     ToggleOverview,
     OpenOverview,
     CloseOverview,
-    #[knuffel(skip)]
+    #[knus(skip)]
     ToggleWindowUrgent(u64),
-    #[knuffel(skip)]
+    #[knus(skip)]
     SetWindowUrgent(u64),
-    #[knuffel(skip)]
+    #[knus(skip)]
     UnsetWindowUrgent(u64),
-    #[knuffel(skip)]
-    LoadConfigFile(#[knuffel(argument)] Option<String>),
+    #[knus(skip)]
+    LoadConfigFile(#[knus(argument)] Option<String>),
     #[cfg(feature = "canvas")]
     ResizeEdge(
-        #[knuffel(argument, str)] niri_ipc::CanvasEdge,
-        #[knuffel(argument)] i32,
+        #[knus(argument, str)] niri_ipc::CanvasEdge,
+        #[knus(argument)] i32,
     ),
     #[cfg(feature = "canvas")]
     ZoomIn,
@@ -543,50 +543,50 @@ pub enum Action {
     #[cfg(feature = "canvas")]
     GatherIslands,
     #[cfg(feature = "canvas")]
-    SendToEdge(#[knuffel(argument, str)] niri_ipc::CanvasSide),
+    SendToEdge(#[knus(argument, str)] niri_ipc::CanvasSide),
     #[cfg(feature = "canvas")]
-    SwapNeighbour(#[knuffel(argument, str)] niri_ipc::CanvasDirection),
+    SwapNeighbour(#[knus(argument, str)] niri_ipc::CanvasDirection),
     #[cfg(feature = "canvas")]
     QuitApp,
     ToggleSynthBackground,
-    SetSynthBackground(#[knuffel(argument, str)] niri_ipc::SynthMode),
+    SetSynthBackground(#[knus(argument, str)] niri_ipc::SynthMode),
     #[cfg(feature = "canvas")]
     CycleFloatingFollow,
     #[cfg(feature = "canvas")]
-    SetFloatingFollow(#[knuffel(argument, str)] niri_ipc::FloatingFollow),
+    SetFloatingFollow(#[knus(argument, str)] niri_ipc::FloatingFollow),
     #[cfg(feature = "canvas")]
-    #[knuffel(skip)]
+    #[knus(skip)]
     LaunchPlaceholder {
         app_id: String,
         icon: Option<String>,
     },
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruAdvance {
         direction: MruDirection,
         scope: Option<MruScope>,
         filter: Option<MruFilter>,
     },
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruConfirm,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruCancel,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruCloseCurrentWindow,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruFirst,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruLast,
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruSetScope(MruScope),
-    #[knuffel(skip)]
+    #[knus(skip)]
     MruCycleScope,
-    #[knuffel(skip)]
+    #[knus(skip)]
     GlobalShortcutActivateAction(u32),
-    #[knuffel(skip)]
+    #[knus(skip)]
     GlobalShortcutDeactivateAction(u32),
 
-    // Doesn't look like knuffel allows gating on #[cfg(test)]...
-    #[knuffel(skip)]
+    // Doesn't look like knus allows gating on #[cfg(test)]...
+    #[knus(skip)]
     TestAction,
 }
 
@@ -980,10 +980,10 @@ impl From<WorkspaceReferenceArg> for WorkspaceReference {
     }
 }
 
-impl<S: knuffel::traits::ErrorSpan> knuffel::DecodeScalar<S> for WorkspaceReference {
+impl<S: knus::traits::ErrorSpan> knus::DecodeScalar<S> for WorkspaceReference {
     fn type_check(
-        type_name: &Option<knuffel::span::Spanned<knuffel::ast::TypeName, S>>,
-        ctx: &mut knuffel::decode::Context<S>,
+        type_name: &Option<knus::span::Spanned<knus::ast::TypeName, S>>,
+        ctx: &mut knus::decode::Context<S>,
     ) {
         if let Some(type_name) = &type_name {
             ctx.emit_error(DecodeError::unexpected(
@@ -995,12 +995,12 @@ impl<S: knuffel::traits::ErrorSpan> knuffel::DecodeScalar<S> for WorkspaceRefere
     }
 
     fn raw_decode(
-        val: &knuffel::span::Spanned<knuffel::ast::Literal, S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        val: &knus::span::Spanned<knus::ast::Literal, S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<WorkspaceReference, DecodeError<S>> {
         match &**val {
-            knuffel::ast::Literal::String(s) => Ok(WorkspaceReference::Name(s.clone().into())),
-            knuffel::ast::Literal::Int(value) => match value.try_into() {
+            knus::ast::Literal::String(s) => Ok(WorkspaceReference::Name(s.clone().into())),
+            knus::ast::Literal::Int(value) => match value.try_into() {
                 Ok(v) => Ok(WorkspaceReference::Index(v)),
                 Err(e) => {
                     ctx.emit_error(DecodeError::conversion(val, e));
@@ -1018,17 +1018,17 @@ impl<S: knuffel::traits::ErrorSpan> knuffel::DecodeScalar<S> for WorkspaceRefere
     }
 }
 
-impl<S> knuffel::Decode<S> for Binds
+impl<S> knus::Decode<S> for Binds
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         expect_only_children(node, ctx);
 
-        let mut nodes: Vec<&knuffel::ast::SpannedNode<S>> = Vec::new();
+        let mut nodes: Vec<&knus::ast::SpannedNode<S>> = Vec::new();
         let mut binds: Vec<Bind> = Vec::new();
 
         for child in node.children() {
@@ -1070,13 +1070,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for Bind
+impl<S> knus::Decode<S> for Bind
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         if let Some(type_name) = &node.type_name {
             ctx.emit_error(DecodeError::unexpected(
@@ -1111,11 +1111,11 @@ where
         for (name, val) in &node.properties {
             match &***name {
                 "repeat" => {
-                    repeat = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?);
+                    repeat = Some(knus::traits::DecodeScalar::decode(val, ctx)?);
                     repeat_node = Some(name);
                 }
                 "pass-through" => {
-                    pass_through = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?);
+                    pass_through = Some(knus::traits::DecodeScalar::decode(val, ctx)?);
 
                     // Supporting this for mouse binds would be a bit weird. Mouse binds trigger
                     // compositor gestures, so should pass-through also trigger the corresponding
@@ -1133,19 +1133,19 @@ where
                     }
                 }
                 "cooldown-ms" => {
-                    cooldown = Some(Duration::from_millis(
-                        knuffel::traits::DecodeScalar::decode(val, ctx)?,
-                    ));
+                    cooldown = Some(Duration::from_millis(knus::traits::DecodeScalar::decode(
+                        val, ctx,
+                    )?));
                 }
                 "allow-when-locked" => {
-                    allow_when_locked = knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                    allow_when_locked = knus::traits::DecodeScalar::decode(val, ctx)?;
                     allow_when_locked_node = Some(name);
                 }
                 "allow-inhibiting" => {
-                    allow_inhibiting = knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                    allow_inhibiting = knus::traits::DecodeScalar::decode(val, ctx)?;
                 }
                 "hotkey-overlay-title" => {
-                    hotkey_overlay_title = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?);
+                    hotkey_overlay_title = Some(knus::traits::DecodeScalar::decode(val, ctx)?);
                 }
                 name_str => {
                     ctx.emit_error(DecodeError::unexpected(
@@ -1176,8 +1176,8 @@ where
         let mut press_action: Option<Action> = None;
         let mut release_action: Option<Action> = None;
 
-        let decode_action = |ctx: &mut knuffel::decode::Context<S>,
-                             child: &knuffel::ast::SpannedNode<S>| {
+        let decode_action = |ctx: &mut knus::decode::Context<S>,
+                             child: &knus::ast::SpannedNode<S>| {
             match Action::decode_node(child, ctx) {
                 Ok(action) => Some(action),
                 Err(e) => {

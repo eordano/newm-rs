@@ -2,9 +2,9 @@ use std::cell::RefCell;
 use std::fs;
 use std::rc::Rc;
 
-use knuffel::ast::SpannedNode;
-use knuffel::errors::DecodeError;
-use knuffel::Decode as _;
+use knus::ast::SpannedNode;
+use knus::errors::DecodeError;
+use knus::Decode as _;
 
 use crate::utils::{expand_home_path, expect_only_children, parse_arg_node, MergeWith};
 use crate::{FloatOrInt, Includes};
@@ -46,35 +46,35 @@ impl Default for Animations {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Clone, PartialEq)]
 pub struct AnimationsPart {
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub on: bool,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub slowdown: Option<FloatOrInt<0, { i32::MAX }>>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub workspace_switch: Option<WorkspaceSwitchAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub window_open: Option<WindowOpenAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub window_close: Option<WindowCloseAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub horizontal_view_movement: Option<HorizontalViewMovementAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub window_movement: Option<WindowMovementAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub window_resize: Option<WindowResizeAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub config_notification_open_close: Option<ConfigNotificationOpenCloseAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub exit_confirmation_open_close: Option<ExitConfirmationOpenCloseAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub screenshot_ui_open: Option<ScreenshotUiOpenAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub overview_open_close: Option<OverviewOpenCloseAnim>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub recent_windows_close: Option<RecentWindowsCloseAnim>,
 }
 
@@ -156,15 +156,15 @@ impl Default for WorkspaceSwitchAnim {
     }
 }
 
-fn parse_custom_shader_path<S: knuffel::traits::ErrorSpan>(
+fn parse_custom_shader_path<S: knus::traits::ErrorSpan>(
     spanned: &SpannedNode<S>,
-    ctx: &mut knuffel::decode::Context<S>,
+    ctx: &mut knus::decode::Context<S>,
 ) -> Result<String, DecodeError<S>> {
     let mut shader_text = None;
 
     for (name, val) in &spanned.properties {
         if &***name == "path" {
-            let path_val = knuffel::traits::DecodeScalar::decode(val, ctx)?;
+            let path_val = knus::traits::DecodeScalar::decode(val, ctx)?;
             let path = match expand_home_path(path_val, spanned, ctx) {
                 Ok(p) => p,
                 Err(e) => {
@@ -386,13 +386,13 @@ impl Default for RecentWindowsCloseAnim {
     }
 }
 
-impl<S> knuffel::Decode<S> for WorkspaceSwitchAnim
+impl<S> knus::Decode<S> for WorkspaceSwitchAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -401,13 +401,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for HorizontalViewMovementAnim
+impl<S> knus::Decode<S> for HorizontalViewMovementAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -416,13 +416,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for WindowMovementAnim
+impl<S> knus::Decode<S> for WindowMovementAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -431,13 +431,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for WindowOpenAnim
+impl<S> knus::Decode<S> for WindowOpenAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().anim;
         let mut custom_shader = None;
@@ -461,13 +461,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for WindowCloseAnim
+impl<S> knus::Decode<S> for WindowCloseAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().anim;
         let mut custom_shader = None;
@@ -491,13 +491,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for WindowResizeAnim
+impl<S> knus::Decode<S> for WindowResizeAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().anim;
         let mut custom_shader = None;
@@ -521,13 +521,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for ConfigNotificationOpenCloseAnim
+impl<S> knus::Decode<S> for ConfigNotificationOpenCloseAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -536,13 +536,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for ExitConfirmationOpenCloseAnim
+impl<S> knus::Decode<S> for ExitConfirmationOpenCloseAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -551,13 +551,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for ScreenshotUiOpenAnim
+impl<S> knus::Decode<S> for ScreenshotUiOpenAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -566,13 +566,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for OverviewOpenCloseAnim
+impl<S> knus::Decode<S> for OverviewOpenCloseAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -581,13 +581,13 @@ where
     }
 }
 
-impl<S> knuffel::Decode<S> for RecentWindowsCloseAnim
+impl<S> knus::Decode<S> for RecentWindowsCloseAnim
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let default = Self::default().0;
         Ok(Self(Animation::decode_node(node, ctx, default, |_, _| {
@@ -607,13 +607,13 @@ impl Animation {
         }
     }
 
-    fn decode_node<S: knuffel::traits::ErrorSpan>(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+    fn decode_node<S: knus::traits::ErrorSpan>(
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
         default: Self,
         mut process_children: impl FnMut(
-            &knuffel::ast::SpannedNode<S>,
-            &mut knuffel::decode::Context<S>,
+            &knus::ast::SpannedNode<S>,
+            &mut knus::decode::Context<S>,
         ) -> Result<bool, DecodeError<S>>,
     ) -> Result<Self, DecodeError<S>> {
         #[derive(Default, PartialEq)]
@@ -631,7 +631,7 @@ impl Animation {
         for child in node.children() {
             match &**child.node_name {
                 "off" => {
-                    knuffel::decode::check_flag_node(child, ctx);
+                    knus::decode::check_flag_node(child, ctx);
                     if off {
                         ctx.emit_error(DecodeError::unexpected(
                             &child.node_name,
@@ -699,7 +699,7 @@ impl Animation {
                         DecodeError::missing(child, "additional argument `curve` is required")
                     })?;
                     let animation_curve_string: String =
-                        knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                        knus::traits::DecodeScalar::decode(val, ctx)?;
 
                     let animation_curve = match animation_curve_string.as_str() {
                         "linear" => Some(Curve::Linear),
@@ -716,7 +716,7 @@ impl Animation {
                             // the X axis represents time frame so it cannot be negative
                             // or larger than 1
                             let x1: FloatOrInt<0, 1> =
-                                knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                                knus::traits::DecodeScalar::decode(val, ctx)?;
                             let val = iter_args.next().ok_or_else(|| {
                                 DecodeError::missing(
                                     child,
@@ -724,7 +724,7 @@ impl Animation {
                                 )
                             })?;
                             let y1: FloatOrInt<{ i32::MIN }, { i32::MAX }> =
-                                knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                                knus::traits::DecodeScalar::decode(val, ctx)?;
                             let val = iter_args.next().ok_or_else(|| {
                                 DecodeError::missing(
                                     child,
@@ -732,7 +732,7 @@ impl Animation {
                                 )
                             })?;
                             let x2: FloatOrInt<0, 1> =
-                                knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                                knus::traits::DecodeScalar::decode(val, ctx)?;
                             let val = iter_args.next().ok_or_else(|| {
                                 DecodeError::missing(
                                     child,
@@ -740,7 +740,7 @@ impl Animation {
                                 )
                             })?;
                             let y2: FloatOrInt<{ i32::MIN }, { i32::MAX }> =
-                                knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                                knus::traits::DecodeScalar::decode(val, ctx)?;
 
                             Some(Curve::CubicBezier(x1.0, y1.0, x2.0, y2.0))
                         }
@@ -824,13 +824,13 @@ impl Animation {
     }
 }
 
-impl<S> knuffel::Decode<S> for SpringParams
+impl<S> knus::Decode<S> for SpringParams
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_node(
-        node: &knuffel::ast::SpannedNode<S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        node: &knus::ast::SpannedNode<S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         if let Some(type_name) = &node.type_name {
             ctx.emit_error(DecodeError::unexpected(
@@ -860,13 +860,13 @@ where
         for (name, val) in &node.properties {
             match &***name {
                 "damping-ratio" => {
-                    damping_ratio = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?);
+                    damping_ratio = Some(knus::traits::DecodeScalar::decode(val, ctx)?);
                 }
                 "stiffness" => {
-                    stiffness = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?);
+                    stiffness = Some(knus::traits::DecodeScalar::decode(val, ctx)?);
                 }
                 "epsilon" => {
-                    epsilon = Some(knuffel::traits::DecodeScalar::decode(val, ctx)?);
+                    epsilon = Some(knus::traits::DecodeScalar::decode(val, ctx)?);
                 }
                 name_str => {
                     ctx.emit_error(DecodeError::unexpected(

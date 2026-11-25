@@ -21,8 +21,8 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use knuffel::errors::DecodeError;
-use knuffel::Decode as _;
+use knus::errors::DecodeError;
+use knus::Decode as _;
 use miette::{miette, Context as _, IntoDiagnostic as _};
 
 #[macro_use]
@@ -120,7 +120,7 @@ pub enum ConfigPath {
     },
 }
 
-// Newtypes for putting information into the knuffel context.
+// Newtypes for putting information into the knus context.
 struct BasePath(PathBuf);
 struct RootBase(PathBuf);
 struct Recursion(u8);
@@ -131,27 +131,27 @@ struct Recursion(u8);
 struct Includes(Vec<PathBuf>);
 
 #[derive(Default)]
-struct IncludeErrors(Vec<knuffel::Error>);
+struct IncludeErrors(Vec<knus::Error>);
 // Used for recursive include detection.
 //
 // We don't *need* it because we have a recursion limit, but it makes for nicer error messages.
 struct IncludeStack(HashSet<PathBuf>);
 struct SawMruBinds(Rc<Cell<bool>>);
 
-// Rather than listing all fields and deriving knuffel::Decode, we implement
-// knuffel::DecodeChildren by hand, since we need custom logic for every field anyway: we want to
+// Rather than listing all fields and deriving knus::Decode, we implement
+// knus::DecodeChildren by hand, since we need custom logic for every field anyway: we want to
 // merge the values into the config from the context as we go to support the positionality of
-// includes. The reason we need this type at all is because knuffel's only entry point that allows
+// includes. The reason we need this type at all is because knus's only entry point that allows
 // setting default values on a context is `parse_with_context()` that needs a type to parse.
 pub struct ConfigPart;
 
-impl<S> knuffel::DecodeChildren<S> for ConfigPart
+impl<S> knus::DecodeChildren<S> for ConfigPart
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn decode_children(
-        nodes: &[knuffel::ast::SpannedNode<S>],
-        ctx: &mut knuffel::decode::Context<S>,
+        nodes: &[knus::ast::SpannedNode<S>],
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let _span = tracy_client::span!("decode config file");
 
@@ -189,14 +189,14 @@ where
 
             macro_rules! m_merge {
                 ($field:ident) => {{
-                    let part = knuffel::Decode::decode_node(node, ctx)?;
+                    let part = knus::Decode::decode_node(node, ctx)?;
                     config.borrow_mut().$field.merge_with(&part);
                 }};
             }
 
             macro_rules! m_push {
                 ($field:ident) => {{
-                    let part = knuffel::Decode::decode_node(node, ctx)?;
+                    let part = knus::Decode::decode_node(node, ctx)?;
                     config.borrow_mut().$field.push(part);
                 }};
             }
@@ -252,7 +252,7 @@ where
                 }
 
                 "screenshot-path" => {
-                    let part = knuffel::Decode::decode_node(node, ctx)?;
+                    let part = knus::Decode::decode_node(node, ctx)?;
                     config.borrow_mut().screenshot_path = part;
                 }
 
@@ -330,7 +330,7 @@ where
                     for (name, val) in &node.properties {
                         match &***name {
                             "optional" => {
-                                optional = knuffel::traits::DecodeScalar::decode(val, ctx)?;
+                                optional = knus::traits::DecodeScalar::decode(val, ctx)?;
                             }
                             name_str => {
                                 ctx.emit_error(DecodeError::unexpected(
@@ -354,7 +354,7 @@ where
                     // We use DecodeError::Missing throughout this block because it results in the
                     // least confusing error messages while still allowing to provide a span.
 
-                    let decoded_path = knuffel::traits::DecodeScalar::decode(path_val, ctx)?;
+                    let decoded_path = knus::traits::DecodeScalar::decode(path_val, ctx)?;
 
                     // Expand ~ into the home dir
                     let path = match expand_home_path(decoded_path, node, ctx) {
@@ -408,20 +408,20 @@ where
                             let relative_path = path.strip_prefix(root_base).ok().unwrap_or(&path);
                             let filename = relative_path.to_str().unwrap_or(filename);
 
-                            let part = knuffel::parse_with_context::<
-                                ConfigPart,
-                                knuffel::span::Span,
-                                _,
-                            >(filename, &text, |ctx| {
-                                ctx.set(BasePath(base));
-                                ctx.set(RootBase(root_base.clone()));
-                                ctx.set(Recursion(recursion));
-                                ctx.set(includes.clone());
-                                ctx.set(include_errors.clone());
-                                ctx.set(IncludeStack(include_stack));
-                                ctx.set(SawMruBinds(saw_mru_binds.clone()));
-                                ctx.set(config.clone());
-                            });
+                            let part = knus::parse_with_context::<ConfigPart, knus::span::Span, _>(
+                                filename,
+                                &text,
+                                |ctx| {
+                                    ctx.set(BasePath(base));
+                                    ctx.set(RootBase(root_base.clone()));
+                                    ctx.set(Recursion(recursion));
+                                    ctx.set(includes.clone());
+                                    ctx.set(include_errors.clone());
+                                    ctx.set(IncludeStack(include_stack));
+                                    ctx.set(SawMruBinds(saw_mru_binds.clone()));
+                                    ctx.set(config.clone());
+                                },
+                            );
 
                             match part {
                                 Ok(_) => {}
@@ -509,10 +509,8 @@ impl Config {
         let include_errors = Rc::new(RefCell::new(IncludeErrors(Vec::new())));
         let include_stack = HashSet::from([path.to_path_buf()]);
 
-        let part = knuffel::parse_with_context::<ConfigPart, knuffel::span::Span, _>(
-            filename,
-            text,
-            |ctx| {
+        let part =
+            knus::parse_with_context::<ConfigPart, knus::span::Span, _>(filename, text, |ctx| {
                 ctx.set(BasePath(base.clone()));
                 ctx.set(RootBase(base));
                 ctx.set(Recursion(0));
@@ -521,8 +519,7 @@ impl Config {
                 ctx.set(IncludeStack(include_stack));
                 ctx.set(SawMruBinds(Rc::new(Cell::new(false))));
                 ctx.set(config.clone());
-            },
-        );
+            });
 
         let includes = includes.take().0;
         let include_errors = include_errors.take().0;
@@ -775,7 +772,7 @@ mod tests {
             Err(err) => err,
         };
 
-        // knuffel keeps the individual diagnostics in a private field, so check the Debug
+        // knus keeps the individual diagnostics in a private field, so check the Debug
         // representation, which includes their messages.
         let err = format!("{err:?}");
         assert!(

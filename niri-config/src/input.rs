@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::str::FromStr;
 
-use knuffel::errors::DecodeError;
-use knuffel::DecodeScalar;
+use knus::errors::DecodeError;
+use knus::DecodeScalar;
 use miette::miette;
 use smithay::input::keyboard::{keysyms, Keysym, XkbConfig};
 use smithay::reexports::input;
@@ -31,33 +31,33 @@ pub struct Input {
     pub mod_key_nested: Option<ModKey>,
 }
 
-#[derive(knuffel::Decode, Debug, Default, PartialEq)]
+#[derive(knus::Decode, Debug, Default, PartialEq)]
 pub struct InputPart {
-    #[knuffel(child)]
+    #[knus(child)]
     pub keyboard: Option<KeyboardPart>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub touchpad: Option<Touchpad>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub mouse: Option<Mouse>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub trackpoint: Option<Trackpoint>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub trackball: Option<Trackball>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub tablet: Option<Tablet>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub touch: Option<Touch>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub disable_power_key_handling: Option<Flag>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub warp_mouse_to_focus: Option<WarpMouseToFocus>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub focus_follows_mouse: Option<FocusFollowsMouse>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub workspace_auto_back_and_forth: Option<Flag>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub mod_key: Option<ModKey>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub mod_key_nested: Option<ModKey>,
 }
 
@@ -112,17 +112,17 @@ impl Default for Keyboard {
     }
 }
 
-#[derive(knuffel::Decode, Debug, PartialEq, Eq)]
+#[derive(knus::Decode, Debug, PartialEq, Eq)]
 pub struct KeyboardPart {
-    #[knuffel(child)]
+    #[knus(child)]
     pub xkb: Option<Xkb>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub repeat_delay: Option<u16>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub repeat_rate: Option<u8>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub track_layout: Option<TrackLayout>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub numlock: Option<Flag>,
 }
 
@@ -133,19 +133,19 @@ impl MergeWith<KeyboardPart> for Keyboard {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, PartialEq, Eq, Clone)]
+#[derive(knus::Decode, Debug, Default, PartialEq, Eq, Clone)]
 pub struct Xkb {
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub rules: String,
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub model: String,
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub layout: String,
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub variant: String,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub options: Option<String>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub file: Option<XkbFile>,
 }
 
@@ -164,7 +164,7 @@ impl Xkb {
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct XkbFile(pub Option<String>);
 
-#[derive(knuffel::DecodeScalar, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(knus::DecodeScalar, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum TrackLayout {
     /// The layout change is global.
     #[default]
@@ -173,13 +173,13 @@ pub enum TrackLayout {
     Window,
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, Copy, PartialEq)]
 pub struct ScrollFactor {
-    #[knuffel(argument)]
+    #[knus(argument)]
     pub base: Option<FloatOrInt<0, 100>>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub horizontal: Option<FloatOrInt<-100, 100>>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub vertical: Option<FloatOrInt<-100, 100>>,
 }
 
@@ -192,113 +192,113 @@ impl ScrollFactor {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct Touchpad {
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub tap: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub dwt: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub dwtp: bool,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub drag: Option<bool>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub drag_lock: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub natural_scroll: bool,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub click_method: Option<ClickMethod>,
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub accel_speed: FloatOrInt<-1, 1>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub accel_profile: Option<AccelProfile>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub scroll_method: Option<ScrollMethod>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub scroll_button: Option<u32>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub scroll_button_lock: bool,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub tap_button_map: Option<TapButtonMap>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub left_handed: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub disabled_on_external_mouse: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub middle_emulation: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub scroll_factor: Option<ScrollFactor>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub pinch_sensitivity: Option<FloatOrInt<0, 100>>,
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct Mouse {
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub natural_scroll: bool,
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub accel_speed: FloatOrInt<-1, 1>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub accel_profile: Option<AccelProfile>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub scroll_method: Option<ScrollMethod>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub scroll_button: Option<u32>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub scroll_button_lock: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub left_handed: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub middle_emulation: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub scroll_factor: Option<ScrollFactor>,
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct Trackpoint {
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub natural_scroll: bool,
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub accel_speed: FloatOrInt<-1, 1>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub accel_profile: Option<AccelProfile>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub scroll_method: Option<ScrollMethod>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub scroll_button: Option<u32>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub scroll_button_lock: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub left_handed: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub middle_emulation: bool,
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct Trackball {
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub natural_scroll: bool,
-    #[knuffel(child, unwrap(argument), default)]
+    #[knus(child, unwrap(argument), default)]
     pub accel_speed: FloatOrInt<-1, 1>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub accel_profile: Option<AccelProfile>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub scroll_method: Option<ScrollMethod>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub scroll_button: Option<u32>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub scroll_button_lock: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub left_handed: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub middle_emulation: bool,
 }
 
@@ -366,43 +366,43 @@ impl From<TapButtonMap> for input::TapButtonMap {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct Tablet {
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child, unwrap(arguments))]
+    #[knus(child, unwrap(arguments))]
     pub calibration_matrix: Option<Vec<f32>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub map_to_output: Option<String>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub map_to_focused_output: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub map_to_focused_window: bool,
-    #[knuffel(child)]
+    #[knus(child)]
     pub left_handed: bool,
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct Touch {
-    #[knuffel(child)]
+    #[knus(child)]
     pub off: bool,
-    #[knuffel(child, unwrap(arguments))]
+    #[knus(child, unwrap(arguments))]
     pub calibration_matrix: Option<Vec<f32>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub map_to_output: Option<String>,
 }
 
-#[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
+#[derive(knus::Decode, Debug, Clone, Copy, PartialEq)]
 pub struct FocusFollowsMouse {
-    #[knuffel(property)]
+    #[knus(property)]
     pub outputs_only: Option<bool>,
-    #[knuffel(property, str)]
+    #[knus(property, str)]
     pub max_scroll_amount: Option<Percent>,
 }
 
-#[derive(knuffel::Decode, Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(knus::Decode, Debug, PartialEq, Eq, Clone, Copy)]
 pub struct WarpMouseToFocus {
-    #[knuffel(property, str)]
+    #[knus(property, str)]
     pub mode: Option<WarpMouseToFocusMode>,
 }
 
@@ -542,11 +542,11 @@ impl FromStr for TapButtonMap {
 
 impl<S> DecodeScalar<S> for XkbFile
 where
-    S: knuffel::traits::ErrorSpan,
+    S: knus::traits::ErrorSpan,
 {
     fn type_check(
-        type_name: &Option<knuffel::span::Spanned<knuffel::ast::TypeName, S>>,
-        ctx: &mut knuffel::decode::Context<S>,
+        type_name: &Option<knus::span::Spanned<knus::ast::TypeName, S>>,
+        ctx: &mut knus::decode::Context<S>,
     ) {
         if let Some(type_name) = &type_name {
             ctx.emit_error(DecodeError::unexpected(
@@ -558,8 +558,8 @@ where
     }
 
     fn raw_decode(
-        value: &knuffel::span::Spanned<knuffel::ast::Literal, S>,
-        ctx: &mut knuffel::decode::Context<S>,
+        value: &knus::span::Spanned<knus::ast::Literal, S>,
+        ctx: &mut knus::decode::Context<S>,
     ) -> Result<Self, DecodeError<S>> {
         let path = PathBuf::raw_decode(value, ctx)?;
         match expand_home_path(path, value, ctx) {
@@ -591,7 +591,7 @@ mod tests {
 
     #[track_caller]
     fn do_parse(text: &str) -> Input {
-        let part = knuffel::parse("test.kdl", text)
+        let part = knus::parse("test.kdl", text)
             .map_err(miette::Report::new)
             .unwrap();
         Input::from_part(&part)

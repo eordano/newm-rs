@@ -1,4 +1,4 @@
-use knuffel::errors::DecodeError;
+use knus::errors::DecodeError;
 use niri_ipc::ColumnDisplay;
 
 use crate::appearance::{
@@ -9,80 +9,80 @@ use crate::layout::DefaultPresetSize;
 use crate::utils::{MergeWith, RegexEq};
 use crate::FloatOrInt;
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct WindowRule {
-    #[knuffel(children(name = "match"))]
+    #[knus(children(name = "match"))]
     pub matches: Vec<Match>,
-    #[knuffel(children(name = "exclude"))]
+    #[knus(children(name = "exclude"))]
     pub excludes: Vec<Match>,
 
     // Rules applied at initial configure.
-    #[knuffel(child)]
+    #[knus(child)]
     pub default_column_width: Option<DefaultPresetSize>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub default_window_height: Option<DefaultPresetSize>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_on_output: Option<String>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_on_workspace: Option<String>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_maximized: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_maximized_to_edges: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_fullscreen: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_floating: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub open_focused: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub on_xdg_activate: Option<OnXdgActivate>,
 
     // Rules applied dynamically.
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub min_width: Option<u16>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub min_height: Option<u16>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub max_width: Option<u16>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub max_height: Option<u16>,
 
-    #[knuffel(child, default)]
+    #[knus(child, default)]
     pub focus_ring: BorderRule,
-    #[knuffel(child, default)]
+    #[knus(child, default)]
     pub border: BorderRule,
-    #[knuffel(child, default)]
+    #[knus(child, default)]
     pub shadow: ShadowRule,
-    #[knuffel(child, default)]
+    #[knus(child, default)]
     pub tab_indicator: TabIndicatorRule,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub draw_border_with_background: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub opacity: Option<f32>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub geometry_corner_radius: Option<CornerRadius>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub clip_to_geometry: Option<bool>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub baba_is_float: Option<bool>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub block_out_from: Option<BlockOutFrom>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub variable_refresh_rate: Option<VrrRule>,
-    #[knuffel(child, unwrap(argument, str))]
+    #[knus(child, unwrap(argument, str))]
     pub default_column_display: Option<ColumnDisplay>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub default_floating_position: Option<FloatingPosition>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub scroll_factor: Option<FloatOrInt<0, 100>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub pinch_sensitivity: Option<FloatOrInt<0, 100>>,
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub tiled_state: Option<bool>,
-    #[knuffel(child, default)]
+    #[knus(child, default)]
     pub background_effect: BackgroundEffectRule,
-    #[knuffel(child, default)]
+    #[knus(child, default)]
     pub popups: PopupsRule,
 }
 
@@ -97,13 +97,13 @@ pub enum VrrRule {
 }
 
 /// Rules for popup surfaces.
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct PopupsRule {
-    #[knuffel(child, unwrap(argument))]
+    #[knus(child, unwrap(argument))]
     pub opacity: Option<f32>,
-    #[knuffel(child)]
+    #[knus(child)]
     pub geometry_corner_radius: Option<CornerRadius>,
-    #[knuffel(child, default)]
+    #[knus(child, default)]
     pub background_effect: BackgroundEffectRule,
 }
 
@@ -132,46 +132,46 @@ impl MergeWith<PopupsRule> for ResolvedPopupsRules {
     }
 }
 
-#[derive(knuffel::Decode, Debug, Default, Clone, PartialEq)]
+#[derive(knus::Decode, Debug, Default, Clone, PartialEq)]
 pub struct Match {
-    #[knuffel(property, str)]
+    #[knus(property, str)]
     pub app_id: Option<RegexEq>,
-    #[knuffel(property, str)]
+    #[knus(property, str)]
     pub title: Option<RegexEq>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub is_active: Option<bool>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub is_focused: Option<bool>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub is_active_in_column: Option<bool>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub is_floating: Option<bool>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub is_window_cast_target: Option<bool>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub is_urgent: Option<bool>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub at_startup: Option<bool>,
 }
 
-#[derive(knuffel::Decode, Debug, Clone, Copy, PartialEq)]
+#[derive(knus::Decode, Debug, Clone, Copy, PartialEq)]
 pub struct FloatingPosition {
-    #[knuffel(property)]
+    #[knus(property)]
     pub x: FloatOrInt<-65535, 65535>,
-    #[knuffel(property)]
+    #[knus(property)]
     pub y: FloatOrInt<-65535, 65535>,
-    #[knuffel(property, default)]
+    #[knus(property, default)]
     pub relative_to: RelativeTo,
 }
 
-#[derive(knuffel::DecodeScalar, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(knus::DecodeScalar, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OnXdgActivate {
     Ignore,
     SetUrgent,
     Focus,
 }
 
-#[derive(knuffel::DecodeScalar, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(knus::DecodeScalar, Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum RelativeTo {
     #[default]
     TopLeft,
@@ -184,15 +184,15 @@ pub enum RelativeTo {
     Right,
 }
 
-impl<S: knuffel::traits::ErrorSpan> knuffel::DecodeScalar<S> for VrrRule {
+impl<S: knus::traits::ErrorSpan> knus::DecodeScalar<S> for VrrRule {
     fn raw_decode(
-        val: &knuffel::span::Spanned<knuffel::ast::Literal, S>,
-        _ctx: &mut knuffel::decode::Context<S>,
+        val: &knus::span::Spanned<knus::ast::Literal, S>,
+        _ctx: &mut knus::decode::Context<S>,
     ) -> Result<VrrRule, DecodeError<S>> {
         const ERROR: &str = "expected `true`, `\"fullscreen-only\"`, or `false`";
         match &**val {
-            knuffel::ast::Literal::Bool(b) => Ok(if *b { VrrRule::On } else { VrrRule::Off }),
-            knuffel::ast::Literal::String(s) => match &s[..] {
+            knus::ast::Literal::Bool(b) => Ok(if *b { VrrRule::On } else { VrrRule::Off }),
+            knus::ast::Literal::String(s) => match &s[..] {
                 // Also accept bool strings to reduce confusion.
                 "true" => Ok(VrrRule::On),
                 "false" => Ok(VrrRule::Off),
@@ -204,14 +204,14 @@ impl<S: knuffel::traits::ErrorSpan> knuffel::DecodeScalar<S> for VrrRule {
     }
 
     fn type_check(
-        type_name: &Option<knuffel::span::Spanned<knuffel::ast::TypeName, S>>,
-        ctx: &mut knuffel::decode::Context<S>,
+        type_name: &Option<knus::span::Spanned<knus::ast::TypeName, S>>,
+        ctx: &mut knus::decode::Context<S>,
     ) {
         if let Some(typ) = type_name {
             ctx.emit_error(DecodeError::TypeName {
                 span: typ.span().clone(),
                 found: Some((**typ).clone()),
-                expected: knuffel::errors::ExpectedType::no_type(),
+                expected: knus::errors::ExpectedType::no_type(),
                 rust_type: stringify!(VrrRule),
             });
         }
